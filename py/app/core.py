@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -107,6 +108,8 @@ class AppEntry:
     asset_size: int = 0
     installed_version: Optional[str] = None
     icon_bytes: Optional[bytes] = None
+    # 用户自己加的本地 IPA（不走下载）
+    local_path: Optional[str] = None
 
 
 @dataclass
@@ -386,6 +389,194 @@ def sign_and_install(ipa: Path, udid: str, on_line) -> None:
 
 
 # MARK: 自身更新
+
+# MARK: 自己添加的 IPA
+
+def _plist_any(raw: bytes) -> dict:
+    import plistlib
+    try:
+        return plistlib.loads(raw)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _png_from_ipa(z, app_dir: str, info: dict) -> Optional[bytes]:
+    """从 IPA 里挑最大的 App 图标。iOS 打包时 PNG 被改成 CgBI 格式（浏览器不认），转回标准 PNG。"""
+    names = []
+    for key in ("CFBundleIcons", "CFBundleIcons~ipad"):
+        prim = (info.get(key) or {}).get("CFBundlePrimaryIcon") or {}
+        names += prim.get("CFBundleIconFiles") or []
+        if prim.get("CFBundleIconName"):
+            names.append(prim["CFBundleIconName"])
+    names += info.get("CFBundleIconFiles") or []
+    if info.get("CFBundleIconFile"):
+        names.append(info["CFBundleIconFile"])
+    files = [n for n in z.namelist() if n.startswith(app_dir) and n.count("/") == app_dir.count("/") and n.lower().endswith(".png")]
+    cands = [f for f in files if any(f[len(app_dir):].startswith(n.rsplit(".png", 1)[0]) for n in names if n)]
+    if not cands:
+        cands = [f for f in files if "appicon" in f.lower() or "icon" in f.lower()]
+    if not cands:
+        return None
+    best = max(cands, key=lambda f: z.getinfo(f).file_size)
+    return cgbi_to_png(z.read(best))
+
+
+def cgbi_to_png(data: bytes) -> bytes:
+    """苹果 CgBI PNG → 标准 PNG（去 CgBI 块、raw deflate 重压、BGRA→RGBA、反预乘 alpha）。普通 PNG 原样返回。"""
+    import struct
+    import zlib
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or b"CgBI" not in data[8:40]:
+        return data
+    pos, chunks, idat = 8, [], b""
+    w = h = 0
+    while pos < len(data):
+        ln = struct.unpack(">I", data[pos:pos + 4])[0]
+        typ = data[pos + 4:pos + 8]
+        body = data[pos + 8:pos + 8 + ln]
+        pos += 12 + ln
+        if typ == b"CgBI":
+            continue
+        if typ == b"IHDR":
+            w, h = struct.unpack(">II", body[:8])
+        if typ == b"IDAT":
+            idat += body
+            continue
+        chunks.append((typ, body))
+        if typ == b"IEND":
+            break
+    raw = bytearray(zlib.decompressobj(-15).decompress(idat))
+    stride = w * 4
+    # 先按 PNG 过滤器还原像素，再改通道顺序；改完用 filter 0 重新编码
+    out = bytearray()
+    prev = bytearray(stride)
+    i = 0
+    for _ in range(h):
+        f = raw[i]; i += 1
+        line = bytearray(raw[i:i + stride]); i += stride
+        for x in range(stride):
+            a = line[x - 4] if x >= 4 else 0
+            b = prev[x]
+            c = prev[x - 4] if x >= 4 else 0
+            if f == 1: line[x] = (line[x] + a) & 255
+            elif f == 2: line[x] = (line[x] + b) & 255
+            elif f == 3: line[x] = (line[x] + ((a + b) >> 1)) & 255
+            elif f == 4:
+                p = a + b - c; pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        prev = line
+        px = bytearray(line)
+        for x in range(0, stride, 4):
+            bb, gg, rr, aa = px[x], px[x + 1], px[x + 2], px[x + 3]
+            if aa:
+                rr, gg, bb = min(255, rr * 255 // aa), min(255, gg * 255 // aa), min(255, bb * 255 // aa)
+            px[x], px[x + 1], px[x + 2], px[x + 3] = rr, gg, bb, aa
+        out += b"\x00" + px
+
+    def chunk(t, b):
+        return struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xffffffff)
+    res = b"\x89PNG\r\n\x1a\n"
+    for t, b in chunks:
+        if t == b"IEND":
+            res += chunk(b"IDAT", zlib.compress(bytes(out), 9))
+        res += chunk(t, b)
+    return res
+
+
+def _custom_dir() -> Path:
+    d = data_dir() / "custom"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def inspect_ipa(path: str) -> dict:
+    """读 IPA 的名字 / 包名 / 版本 / 最低系统 / 图标。不是有效 IPA 抛 SignError。"""
+    import zipfile
+    p = Path(path)
+    if not p.is_file():
+        raise SignError("文件不存在")
+    try:
+        z = zipfile.ZipFile(p)
+    except zipfile.BadZipFile:
+        raise SignError("这不是有效的 IPA 文件（应为 .ipa 安装包）")
+    with z:
+        plists = [n for n in z.namelist() if n.startswith("Payload/") and n.endswith(".app/Info.plist") and n.count("/") == 2]
+        if not plists:
+            raise SignError("IPA 里没找到 App（缺少 Payload/xxx.app）")
+        info = _plist_any(z.read(plists[0]))
+        app_dir = plists[0][: -len("Info.plist")]
+        icon = _png_from_ipa(z, app_dir, info)
+    name = info.get("CFBundleDisplayName") or info.get("CFBundleName") or p.stem
+    return {
+        "name": str(name),
+        "bundle_id": str(info.get("CFBundleIdentifier", "")),
+        "version": str(info.get("CFBundleShortVersionString") or info.get("CFBundleVersion") or ""),
+        "min_ios": str(info.get("MinimumOSVersion", "")),
+        "size": p.stat().st_size,
+        "icon": icon,
+    }
+
+
+def load_custom_apps() -> list[AppEntry]:
+    """「我的 IPA」：保存在本机 custom/apps.json，IPA 复制一份到 custom/ 下（原文件删了也能再装）"""
+    f = _custom_dir() / "apps.json"
+    try:
+        items = json.loads(f.read_text("utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for it in items:
+        ipa = _custom_dir() / it["file"]
+        if not ipa.exists():
+            continue
+        icon_f = _custom_dir() / (it["id"] + ".png")
+        out.append(AppEntry(
+            id=it["id"], name=it["name"], subtitle="我添加的 IPA", description=it.get("bundle_id", ""),
+            bundle_id=it.get("bundle_id", ""), icon="", repo="", asset_pattern="", min_ios=it.get("min_ios", ""),
+            latest_version=it.get("version") or "-", asset_size=ipa.stat().st_size, local_path=str(ipa),
+            icon_bytes=icon_f.read_bytes() if icon_f.exists() else None))
+    return out
+
+
+def _save_custom(items: list[dict]) -> None:
+    (_custom_dir() / "apps.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), "utf-8")
+
+
+def add_custom_ipa(path: str) -> AppEntry:
+    """加一个本地 IPA：校验 → 复制进数据目录 → 记进列表。同包名的旧条目被替换（相当于升级）。"""
+    import hashlib
+    import shutil
+    meta = inspect_ipa(path)
+    key = meta["bundle_id"] or Path(path).name
+    cid = "custom-" + hashlib.sha1(key.encode()).hexdigest()[:10]
+    dst = _custom_dir() / (cid + ".ipa")
+    shutil.copyfile(path, dst)
+    if meta["icon"]:
+        (_custom_dir() / (cid + ".png")).write_bytes(meta["icon"])
+    f = _custom_dir() / "apps.json"
+    try:
+        items = json.loads(f.read_text("utf-8"))
+    except Exception:  # noqa: BLE001
+        items = []
+    items = [it for it in items if it["id"] != cid]
+    items.insert(0, {"id": cid, "name": meta["name"], "bundle_id": meta["bundle_id"], "version": meta["version"],
+                     "min_ios": meta["min_ios"], "file": dst.name, "added": int(time.time())})
+    _save_custom(items)
+    return next(a for a in load_custom_apps() if a.id == cid)
+
+
+def remove_custom_ipa(cid: str) -> None:
+    f = _custom_dir() / "apps.json"
+    try:
+        items = json.loads(f.read_text("utf-8"))
+    except Exception:  # noqa: BLE001
+        return
+    _save_custom([it for it in items if it["id"] != cid])
+    for ext in (".ipa", ".png"):
+        try:
+            (_custom_dir() / (cid + ext)).unlink()
+        except FileNotFoundError:
+            pass
+
 
 def newer(a: str, b: str) -> bool:
     """a 比 b 新（按 . 分段数字比）"""
