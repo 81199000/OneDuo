@@ -77,9 +77,14 @@
   /* 弹窗 */
   .mask { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; }
   .mask.show { display: flex; }
-  .dialog { width: 380px; background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .dialog { width: 440px; max-height: 92vh; overflow-y: auto; background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
   .dialog h3 { font-size: 18px; margin-bottom: 6px; }
   .dialog p { color: var(--sub); font-size: 13px; margin-bottom: 14px; }
+  .safe { background: #141518; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 4px 0 6px; }
+  .safe-h { font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+  .safe ul { margin: 0 0 0 16px; color: var(--sub); font-size: 12.5px; line-height: 1.6; }
+  .safe b { color: var(--text); font-weight: 600; }
+  .safe-note { color: var(--dim); font-size: 11.5px; margin-top: 8px; line-height: 1.5; }
   .dialog label { display: block; color: var(--sub); font-size: 12.5px; margin: 10px 0 4px; }
   .dialog input { width: 100%; background: #111214; color: var(--text); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 12px; font: inherit; font-size: 15px; -webkit-user-select: text; user-select: text; }
@@ -114,7 +119,16 @@
 
 <div class="mask" id="loginMask"><div class="dialog">
   <h3>登录 Apple ID</h3>
-  <p>账号密码直接发给苹果，本软件不保存密码。建议用一个小号。</p>
+  <div class="safe">
+    <div class="safe-h">🔒 安全说明</div>
+    <ul>
+      <li>账号和密码<b>直接发送到苹果官方服务器</b>（gsa.apple.com），不经过我们或任何第三方。</li>
+      <li>用的是苹果自己的加密登录协议，密码本身不会在网络上明文传输。</li>
+      <li>本软件<b>不保存密码</b>，只在你电脑上保存苹果返回的登录凭证，可随时点「退出」清除。</li>
+      <li>签名核心基于开源项目 <span class="link" onclick="api().open_url('https://github.com/claration/Impactor')">Impactor</span>（MIT 协议），代码公开可查。</li>
+    </ul>
+    <div class="safe-note">登录时还需一份"设备身份"数据，由公共开源服务获取，这一步不包含账号和密码。建议使用 Apple ID 小号。</div>
+  </div>
   <label>Apple ID（邮箱或手机号）</label><input id="user" autocomplete="off" spellcheck="false">
   <label>密码</label><input id="pw" type="password">
   <div class="row"><button class="ghost" onclick="loginDone(false)">取消</button>
