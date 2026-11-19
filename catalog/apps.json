@@ -33,6 +33,18 @@
       "asset_pattern": "GuoDuo-*-unsigned.ipa",
       "min_ios": "18.4",
       "homepage": "https://github.com/81199000/HongGuo"
+    },
+    {
+      "id": "test",
+      "name": "测试新App",
+      "subtitle": "列表新增验证",
+      "description": "临时条目",
+      "bundle_id": "x.test",
+      "icon": "icons/guoduo.png",
+      "repo": "81199000/HongGuo",
+      "asset_pattern": "GuoDuo-*-unsigned.ipa",
+      "min_ios": "18.4",
+      "homepage": ""
     }
   ]
 }
