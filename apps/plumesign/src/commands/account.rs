@@ -149,14 +149,26 @@ async fn login(args: LoginArgs) -> Result<()> {
 
         let can_use_sms = !req.trusted_phone_numbers.is_empty();
         let kind = if matches!(req.method, plume_core::auth::TwoFactorMethod::Sms) { "sms" } else { "device" };
+        // 一键装：图形前端协议
+        //   PLUME_NEED_2FA <device|sms>
+        //   PLUME_SMS_PHONES <id>:<尾号>|<id>:<尾号>…（有受信任手机号才打）
+        // 前端回一行：6 位验证码 / resend（重推到设备）/ sms:<id>（发短信到这个号）/ sms（第一个号）
         println!("PLUME_NEED_2FA {}", kind);
+        if can_use_sms {
+            let phones: Vec<String> = req
+                .trusted_phone_numbers
+                .iter()
+                .map(|p| format!("{}:{}", p.id, p.last_two_digits))
+                .collect();
+            println!("PLUME_SMS_PHONES {}", phones.join("|"));
+        }
         let _ = std::io::stdout().flush();
         match req.method {
-            TwoFactorMethod::Sms => log::info!("Enter the code sent via SMS: "),
+            TwoFactorMethod::Sms => log::info!("Enter the code sent via SMS (or 'resend'): "),
             TwoFactorMethod::Device if can_use_sms => {
-                log::info!("Enter the code sent to your device, or type 'sms' to receive it by text message: ")
+                log::info!("Enter the code sent to your device, 'resend', or 'sms' to receive it by text message: ")
             }
-            TwoFactorMethod::Device => log::info!("Enter 2FA code: "),
+            TwoFactorMethod::Device => log::info!("Enter 2FA code (or 'resend'): "),
         }
 
         let mut input = String::new();
@@ -165,8 +177,24 @@ async fn login(args: LoginArgs) -> Result<()> {
             .map_err(|e| e.to_string())?;
         let input = input.trim();
 
+        if input.eq_ignore_ascii_case("resend") {
+            // 短信模式下「重发」= 再发一次短信到同一个号；设备模式 = 重新推送到设备
+            if matches!(req.method, TwoFactorMethod::Sms) && can_use_sms {
+                return std::result::Result::Ok(TwoFactorAction::SendSms(req.trusted_phone_numbers[0].id));
+            }
+            return std::result::Result::Ok(TwoFactorAction::ResendDevice);
+        }
+
+        if let Some(rest) = input.strip_prefix("sms:") {
+            if let std::result::Result::Ok(id) = rest.trim().parse::<u32>() {
+                if req.trusted_phone_numbers.iter().any(|p| p.id == id) {
+                    return std::result::Result::Ok(TwoFactorAction::SendSms(id));
+                }
+            }
+        }
+
         if input.eq_ignore_ascii_case("sms") && can_use_sms {
-            let id = if req.trusted_phone_numbers.len() == 1 {
+            let id = if req.trusted_phone_numbers.len() == 1 || !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
                 req.trusted_phone_numbers[0].id
             } else {
                 let labels: Vec<String> = req
@@ -174,20 +202,12 @@ async fn login(args: LoginArgs) -> Result<()> {
                     .iter()
                     .map(|p| format!("Phone ending in {}", p.last_two_digits))
                     .collect();
-                let choice = if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-                    Select::new()
-                        .with_prompt("Send SMS to which number?")
-                        .items(&labels)
-                        .default(0)
-                        .interact()
-                        .map_err(|e| e.to_string())?
-                } else {
-                    // GuoDuo 安装器：打出号码列表，读一行序号
-                    println!("PLUME_SMS_NUMBERS {}", labels.join("|"));
-                    let mut line = String::new();
-                    std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
-                    line.trim().parse::<usize>().unwrap_or(0).min(labels.len() - 1)
-                };
+                let choice = Select::new()
+                    .with_prompt("Send SMS to which number?")
+                    .items(&labels)
+                    .default(0)
+                    .interact()
+                    .map_err(|e| e.to_string())?;
                 req.trusted_phone_numbers[choice].id
             };
             return std::result::Result::Ok(TwoFactorAction::SendSms(id));

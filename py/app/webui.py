@@ -247,9 +247,10 @@ class Api:
         self._login_ready.wait()
         return self._login
 
-    def _ask_2fa(self, kind):
+    def _ask_2fa(self, kind, phones=None):
+        """返回：6 位验证码 / "resend" / "sms:<id>"；None = 取消"""
         self._twofa_ready.clear()
-        self.push("need_2fa", kind)
+        self.push("need_2fa", {"kind": kind, "phones": phones or []})
         self._twofa_ready.wait()
         return self._twofa
 
