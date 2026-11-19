@@ -26,7 +26,7 @@ log = logging.getLogger("onetap.autopilot")
 DAY = 86400
 SIGN_VALID = 7 * DAY            # 免费账号描述文件有效期（实测 7 天整）
 RENEW_BEFORE = 2 * DAY          # 剩不到 2 天就续
-UPDATE_CHECK_EVERY = 6 * 3600   # 新版本 6 小时查一次
+UPDATE_CHECK_EVERY = 30 * 60     # 新版本 30 分钟查一次（只读 GitHub，很轻）
 TICK = 60                       # 每分钟看一眼有没有活
 RETRY_AFTER = 30 * 60           # 失败后半小时再试
 

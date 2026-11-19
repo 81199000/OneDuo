@@ -47,5 +47,7 @@ if sys.platform == "darwin":
         },
     )
 else:
-    exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name="一键装", console=False,
-              icon=str(ROOT / "packaging" / "OneTap.ico"))
+    # Windows：onedir（启动快，不用每次解压到临时目录），Inno Setup 再打成安装包
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="一键装", console=False,
+              icon=str(ROOT / "packaging" / "OneTap.ico"), version=None)
+    coll = COLLECT(exe, a.binaries, a.datas, name="一键装")
