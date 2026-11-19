@@ -16,3 +16,4 @@ cargo-sources.json
 # 一键装
 __pycache__/
 *.pyc
+py/.venv/
