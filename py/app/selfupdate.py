@@ -133,8 +133,11 @@ def _launch_windows(setup: Path) -> None:
         "$ErrorActionPreference = 'SilentlyContinue'\r\n"
         f"while (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\r\n"
         "$ok = $false\r\n"
-        f"try {{ $p = Start-Process -FilePath '{q(setup)}' -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOCANCEL','/CLOSEAPPLICATIONS','/FORCECLOSEAPPLICATIONS' "
-        "-Verb RunAs -Wait -PassThru -ErrorAction Stop; $ok = ($p.ExitCode -eq 0) } catch { $ok = $false }\r\n"
+        # 只等安装包本身（Start-Process -Wait 会连它拉起的新一键签一起等，脚本就一直挂着）
+        f"try {{ $si = New-Object System.Diagnostics.ProcessStartInfo '{q(setup)}'; "
+        "$si.Arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOCANCEL /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS'; "
+        "$si.Verb = 'runas'; $si.UseShellExecute = $true; $p = [System.Diagnostics.Process]::Start($si); $p.WaitForExit(); "
+        "$ok = ($p.ExitCode -eq 0) } catch { $ok = $false }\r\n"
         f"if (-not $ok) {{ Start-Process -FilePath '{q(exe)}' }}\r\n"
         "Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force\r\n",
         encoding="utf-8-sig")   # 带 BOM：路径里有中文，Windows PowerShell 5.1 才按 UTF-8 读
@@ -190,6 +193,11 @@ rm -rf "{work}"
 
 def cleanup_old() -> None:
     """启动时清掉下载过的安装包（能走到这里说明要么已经装完，要么上次没装，点更新时会重新下）"""
+    for f in Path(tempfile.gettempdir()).glob("oneduo-update*"):
+        try:
+            f.unlink()
+        except OSError:
+            pass
     d = core.data_dir() / "updates"
     if d.exists():
         for f in d.iterdir():
