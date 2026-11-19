@@ -76,6 +76,7 @@ class Api:
                 return
             self.catalog = cat
             self.apps = {a.id: a for a in cat.apps}
+            self.push_custom()
             out = []
             for a in cat.apps:
                 ic = core.load_icon(cat, a)
@@ -95,6 +96,64 @@ class Api:
                     or cat.installer_download.get("github", "")
                 self.push("self_update", {"version": cat.installer_latest, "notes": cat.installer_notes, "url": url})
         threading.Thread(target=work, daemon=True).start()
+
+    @staticmethod
+    def _custom_json(a: core.AppEntry) -> dict:
+        ic = a.icon_bytes
+        return {"id": a.id, "name": a.name, "subtitle": a.subtitle, "description": a.description,
+                "min_ios": a.min_ios, "homepage": "", "custom": True, "version": a.latest_version,
+                "size": a.asset_size, "has_asset": True, "bundle_id": a.bundle_id,
+                "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""}
+
+    def push_custom(self, select: str = ""):
+        customs = core.load_custom_apps()
+        for a in customs:
+            self.apps[a.id] = a
+        self.push("custom", {"apps": [self._custom_json(a) for a in customs], "select": select})
+
+    def pick_ipa(self):
+        """系统「打开文件」对话框选 IPA（可多选）"""
+        paths = self.window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True,
+                                               file_types=("iOS 安装包 (*.ipa)", "所有文件 (*.*)")) if self.window else None
+        if paths:
+            self.add_ipas(list(paths))
+
+    def add_ipas(self, paths):
+        def work():
+            last, errs = "", []
+            for p in paths:
+                try:
+                    a = core.add_custom_ipa(p)
+                    last = a.id
+                    log.info("custom ipa added %s %s %s", a.name, a.bundle_id, a.latest_version)
+                except Exception as e:  # noqa: BLE001
+                    errs.append(f"{Path(p).name}：{e}")
+            self.push_custom(select=last)
+            if errs:
+                self.push("toast", "没加进来：\n" + "\n".join(errs))
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_drop(self, e):
+        """拖进窗口的文件（pywebview 的 DOM 事件里才有完整路径）"""
+        if self.busy:
+            return
+        files = (e.get("dataTransfer") or {}).get("files") or []
+        paths = [f.get("pywebviewFullPath") for f in files if f.get("pywebviewFullPath")]
+        ipas = [p for p in paths if p.lower().endswith(".ipa")]
+        log.info("drop %d files, %d ipa", len(paths), len(ipas))
+        if not paths:
+            self.push("toast", "没拿到文件路径，请用「＋ 添加自己的 IPA」按钮选择")
+        elif not ipas:
+            self.push("toast", "只能添加 .ipa 安装包")
+        else:
+            self.add_ipas(ipas)
+
+    def remove_custom(self, cid):
+        if self.busy:
+            return
+        core.remove_custom_ipa(cid)
+        self.apps.pop(cid, None)
+        self.push_custom()
 
     def devices(self):
         devs = core.list_devices()
@@ -179,8 +238,14 @@ class Api:
             self.push("step", {"step": "account", "state": "ok", "note": accts[0] if accts else ""})
             step = "download"
             self.push("step", {"step": "download", "state": "run"})
-            ipa = core.download_ipa(a, lambda p: self.push("progress", {"step": "download", "value": p}), self.cancel)
-            self.push("step", {"step": "download", "state": "ok", "note": f"v{a.latest_version}"})
+            if a.local_path:
+                ipa = Path(a.local_path)
+                if not ipa.exists():
+                    raise core.SignError("这个 IPA 文件找不到了，请重新添加")
+                self.push("step", {"step": "download", "state": "ok", "note": "本地文件"})
+            else:
+                ipa = core.download_ipa(a, lambda p: self.push("progress", {"step": "download", "value": p}), self.cancel)
+                self.push("step", {"step": "download", "state": "ok", "note": f"v{a.latest_version}"})
             step = "install"
             self.push("step", {"step": "install", "state": "run"})
             self.push("log", "正在签名并安装到手机，请保持手机解锁、数据线不要拔…")
@@ -207,5 +272,10 @@ def main():
     win = webview.create_window(f"一键装 {core.VERSION}", url=str(html), js_api=api,
                                 width=900, height=640, min_size=(780, 560), background_color="#111214")
     api.window = win
-    webview.start(debug=bool(__import__("os").environ.get("ONETAP_DEBUG")))
+
+    def bind_drop(window):
+        from webview.dom import DOMEventHandler
+        window.dom.document.events.drop += DOMEventHandler(api.on_drop, prevent_default=True, stop_propagation=False)
+
+    webview.start(bind_drop, win, debug=bool(__import__("os").environ.get("ONETAP_DEBUG")))
     log.info("exit normally")
