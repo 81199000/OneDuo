@@ -54,9 +54,11 @@ pub async fn execute(args: DeviceArgs) -> Result<()> {
         let mut muxer = UsbmuxdConnection::default().await?;
         let devices = muxer.get_devices().await?;
         for d in futures::future::join_all(devices.into_iter().map(Device::new)).await {
+            // macOS usbmuxd 给的 Wi‑Fi 地址是 IPv6 链路本地（fe80::），idevice 能连但会归成 Unknown("Network 1E")
             let conn = match d.usbmuxd_device.as_ref().map(|u| &u.connection_type) {
                 Some(idevice::usbmuxd::Connection::Usb) => "USB",
                 Some(idevice::usbmuxd::Connection::Network(_)) => "WiFi",
+                Some(idevice::usbmuxd::Connection::Unknown(s)) if s.starts_with("Network") => "WiFi",
                 _ => "Unknown",
             };
             println!("PLUME_DEVICE {}\t{}\t{}", d.udid, conn, d.name);
