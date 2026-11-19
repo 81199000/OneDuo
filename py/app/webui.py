@@ -11,13 +11,14 @@ import json
 import logging
 import sys
 import threading
+import os
 import time
 import webbrowser
 from pathlib import Path
 
 import webview
 
-from . import autopilot, core
+from . import autopilot, selfupdate, core
 
 # 日志：~/Library/Logs/OneTapInstall.log（Windows 在 %APPDATA%\\OneTapInstall），闪退也能事后查
 LOG_PATH = (Path.home() / "Library" / "Logs" / "OneTapInstall.log") if sys.platform == "darwin" else core.data_dir() / "OneTapInstall.log"
@@ -37,6 +38,7 @@ class Api:
         self._cancel = threading.Event()
         self._busy = False
         self._sign_lock = threading.Lock()   # 手动安装和自动续签共用，同一时刻只跑一个签名
+        self._update = None                  # (版本, 安装包信息)：有新版时由列表刷新填上
         self._pilot = autopilot.Autopilot(lambda: dict(self._apps), self._sign_lock, self._pilot_event)
         self._twofa = None
         self._twofa_ready = threading.Event()
@@ -97,7 +99,14 @@ class Api:
             if core.newer(cat.installer_latest, core.VERSION):
                 url = cat.installer_download.get("gitee" if core.is_cn() else "github") \
                     or cat.installer_download.get("github", "")
-                self.push("self_update", {"version": cat.installer_latest, "notes": cat.installer_notes, "url": url})
+                self._update = (cat.installer_latest, selfupdate.asset_for(cat))
+                auto = selfupdate.can_self_update() and bool(self._update[1])
+                self.push("self_update", {"version": cat.installer_latest, "current": core.VERSION,
+                                          "notes": cat.installer_notes, "url": url, "auto": auto})
+                if auto and (core.data_dir() / "autoupdate-test").exists():
+                    log.info("autoupdate-test flag: updating to %s", cat.installer_latest)
+                    (core.data_dir() / "autoupdate-test").unlink(missing_ok=True)
+                    self.self_update()
         threading.Thread(target=work, daemon=True).start()
 
     @staticmethod
@@ -225,6 +234,33 @@ class Api:
     def submit_2fa(self, code):
         self._twofa = code or None
         self._twofa_ready.set()
+
+    def self_update(self):
+        """点「立即更新」：下载 → 校验 → 退出并替换。签名进行中就等它做完再更新。"""
+        if not self._update or not self._update[1]:
+            return
+        ver, asset = self._update
+
+        def work():
+            try:
+                if not self._sign_lock.acquire(timeout=0.2):
+                    self.push("self_update_progress", {"stage": "wait"})
+                    self._sign_lock.acquire()      # 等正在进行的签名 / 续签结束
+                try:
+                    pkg = selfupdate.download(ver, asset, lambda p: self.push("self_update_progress", {"stage": "download", "p": p}))
+                    self.push("self_update_progress", {"stage": "install"})
+                    log.info("self update %s -> %s via %s", core.VERSION, ver, pkg.name)
+                    selfupdate.launch_installer(pkg)
+                except Exception:
+                    self._sign_lock.release()
+                    raise
+                # 不释放锁：马上退出，免得退出前又开始续签
+                time.sleep(0.8)
+                os._exit(0)
+            except Exception as e:  # noqa: BLE001
+                log.exception("self update failed")
+                self.push("self_update_progress", {"stage": "error", "msg": str(e)[:200]})
+        threading.Thread(target=work, daemon=True).start()
 
     def install(self, app_id, udid):
         if self._busy:
@@ -397,6 +433,7 @@ def main():
                                 minimized=background)
     api._window = win
     core._migrate_old_name()
+    selfupdate.cleanup_old()
     api._pilot.enabled = core.get_pref("autopilot", True)
     api._pilot.start()
 

@@ -118,6 +118,7 @@ class Catalog:
     installer_latest: str = VERSION
     installer_notes: str = ""
     installer_download: dict = field(default_factory=dict)
+    installer_assets: dict = field(default_factory=dict)   # {"windows": {name, sha256, size}, "macos": {...}}
     base_url: str = ""
     source: str = ""
 
@@ -128,7 +129,8 @@ def _parse_catalog(raw: bytes, base_url: str, source: str) -> Catalog:
     apps = [AppEntry(**{k: v for k, v in a.items() if k in keys}) for a in j.get("apps", [])]
     inst = j.get("installer", {})
     return Catalog(apps=apps, installer_latest=inst.get("latest", VERSION), installer_notes=inst.get("notes", ""),
-                   installer_download=inst.get("download", {}), base_url=base_url, source=source)
+                   installer_download=inst.get("download", {}), installer_assets=inst.get("assets", {}),
+                   base_url=base_url, source=source)
 
 
 def load_catalog() -> Catalog:

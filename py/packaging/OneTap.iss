@@ -65,6 +65,8 @@ Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\Bonjour64.msi"" /qn /norestart"
 ; 关键：苹果手机服务启动时 Bonjour 还没装，就永远不会去 Wi‑Fi 上找手机（实测：重启这个服务后 15 秒内认到）
 Filename: "{sys}\cmd.exe"; Parameters: "/c net stop ""Apple Mobile Device Service"" & net start ""Apple Mobile Device Service"""; StatusMsg: "{cm:Bonjour}"; Flags: runhidden waituntilterminated
 Filename: "{app}\一键签.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
+; 一键签自己点「立即更新」时是静默安装：装完以原用户身份重新打开
+Filename: "{app}\一键签.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [InstallDelete]
 ; 改名前叫「一键装」：清掉旧快捷方式和旧主程序，免得开始菜单 / 桌面 / 开机启动里有两个
