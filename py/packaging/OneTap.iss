@@ -36,6 +36,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 chs.Driver=正在安装苹果手机驱动（Apple Mobile Device Support）…
 en.Driver=Installing Apple Mobile Device Support…
+chs.Bonjour=正在安装 Bonjour（让电脑通过 Wi‑Fi 找到手机）…
+en.Bonjour=Installing Bonjour (find iPhone over Wi-Fi)…
 chs.DesktopIcon=创建桌面快捷方式
 en.DesktopIcon=Create a desktop shortcut
 chs.AutoStart=开机自动启动（后台自动续签，推荐）
@@ -50,6 +52,7 @@ Name: "autostart"; Description: "{cm:AutoStart}"
 [Files]
 Source: "..\dist\一键装\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "drivers\AppleMobileDeviceSupport64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedAppleDriver
+Source: "drivers\Bonjour64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedBonjour
 
 [Icons]
 Name: "{autoprograms}\一键装"; Filename: "{app}\一键装.exe"
@@ -58,6 +61,7 @@ Name: "{userstartup}\一键装"; Filename: "{app}\一键装.exe"; Parameters: "-
 
 [Run]
 Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\AppleMobileDeviceSupport64.msi"" /qn /norestart"; StatusMsg: "{cm:Driver}"; Flags: waituntilterminated; Check: NeedAppleDriver
+Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\Bonjour64.msi"" /qn /norestart"; StatusMsg: "{cm:Bonjour}"; Flags: waituntilterminated; Check: NeedBonjour
 Filename: "{app}\一键装.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
@@ -70,4 +74,12 @@ var
   S: String;
 begin
   Result := not RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\Apple Mobile Device Service', 'ImagePath', S);
+end;
+
+{ Bonjour：Windows 上通过 Wi‑Fi 发现手机要靠它（iTunes 新版已不带，单独装苹果官方的 Bonjour64.msi） }
+function NeedBonjour: Boolean;
+var
+  S: String;
+begin
+  Result := not RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\Bonjour Service', 'ImagePath', S);
 end;

@@ -388,6 +388,35 @@ impl fmt::Display for Device {
     }
 }
 
+/// 一键装：手机的「通过 Wi‑Fi 连接」开关（= 访达 / iTunes 里那个勾选框，写在手机上，换电脑也有效）。
+/// on=None 只读不改。必须数据线连着、手机已信任这台电脑。
+pub async fn wifi_sync(device_id: &str, on: Option<bool>) -> Result<bool, Error> {
+    let dev = get_device_for_id(device_id).await?;
+    let u = dev
+        .usbmuxd_device
+        .clone()
+        .ok_or_else(|| Error::Other("Device is not connected".to_string()))?;
+    let provider = u.to_provider(UsbmuxdAddr::default(), HOUSE_ARREST_LABEL);
+    let mut usbmuxd = UsbmuxdConnection::default().await?;
+    let pairing_file = usbmuxd.get_pair_record(&dev.udid).await?;
+    let mut lc = LockdownClient::connect(&provider).await?;
+    lc.start_session(&pairing_file).await?;
+    if let Some(v) = on {
+        lc.set_value("EnableWifiConnections", v.into(), Some("com.apple.mobile.wireless_lockdown"))
+            .await?;
+        lc.set_value("EnableWifiDebugging", v.into(), Some("com.apple.mobile.wireless_lockdown"))
+            .await
+            .ok();
+    }
+    let cur = lc
+        .get_value(Some("EnableWifiConnections"), Some("com.apple.mobile.wireless_lockdown"))
+        .await
+        .ok()
+        .and_then(|v| v.as_boolean())
+        .unwrap_or(false);
+    Ok(cur)
+}
+
 pub async fn get_device_for_id(device_id: &str) -> Result<Device, Error> {
     let mut usbmuxd = UsbmuxdConnection::default().await?;
     // 一键装：上游只比 usbmuxd 的连接序号（device_id），传 UDID 永远找不到；两种都认，USB 优先于 Wi‑Fi
