@@ -21,9 +21,9 @@ from . import autopilot, core
 
 # 日志：~/Library/Logs/OneTapInstall.log（Windows 在 %APPDATA%\\OneTapInstall），闪退也能事后查
 LOG_PATH = (Path.home() / "Library" / "Logs" / "OneTapInstall.log") if sys.platform == "darwin" else core.data_dir() / "OneTapInstall.log"
-logging.basicConfig(filename=LOG_PATH, level=logging.INFO, format="%(asctime)s %(threadName)s %(levelname)s %(message)s")
+logging.basicConfig(filename=LOG_PATH, encoding="utf-8", level=logging.INFO, format="%(asctime)s %(threadName)s %(levelname)s %(message)s")
 log = logging.getLogger("onetap")
-_fault_file = open(LOG_PATH, "a")
+_fault_file = open(LOG_PATH, "a", encoding="utf-8")
 faulthandler.enable(_fault_file)
 sys.excepthook = lambda t, v, tb: log.critical("uncaught", exc_info=(t, v, tb))
 threading.excepthook = lambda a: log.critical("uncaught in %s", a.thread, exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
@@ -31,13 +31,13 @@ threading.excepthook = lambda a: log.critical("uncaught in %s", a.thread, exc_in
 
 class Api:
     def __init__(self):
-        self.window: webview.Window | None = None
-        self.catalog: core.Catalog | None = None
-        self.apps: dict[str, core.AppEntry] = {}
-        self.cancel = threading.Event()
-        self.busy = False
-        self.sign_lock = threading.Lock()   # 手动安装和自动续签共用，同一时刻只跑一个签名
-        self.pilot = autopilot.Autopilot(lambda: dict(self.apps), self.sign_lock, self._pilot_event)
+        self._window: webview.Window | None = None
+        self._catalog: core.Catalog | None = None
+        self._apps: dict[str, core.AppEntry] = {}
+        self._cancel = threading.Event()
+        self._busy = False
+        self._sign_lock = threading.Lock()   # 手动安装和自动续签共用，同一时刻只跑一个签名
+        self._pilot = autopilot.Autopilot(lambda: dict(self._apps), self._sign_lock, self._pilot_event)
         self._twofa = None
         self._twofa_ready = threading.Event()
         self._login = None
@@ -48,7 +48,7 @@ class Api:
 
     def push(self, event: str, data=None):
         """后台线程 → 界面。日志类消息节流（签名时每秒上百行，全推会把网页桥压垮）；推送失败只记日志不崩"""
-        if not self.window:
+        if not self._window:
             return
         if event in ("log", "progress"):
             now = time.monotonic()
@@ -56,7 +56,7 @@ class Api:
                 return
             self._last_push[event] = now
         try:
-            self.window.evaluate_js(f"window.onEvent({json.dumps(event)}, {json.dumps(data, ensure_ascii=False)})")
+            self._window.evaluate_js(f"window.onEvent({json.dumps(event)}, {json.dumps(data, ensure_ascii=False)})")
         except Exception:  # noqa: BLE001
             log.exception("push %s failed", event)
 
@@ -76,8 +76,8 @@ class Api:
             except Exception as e:  # noqa: BLE001
                 self.push("catalog_error", str(e))
                 return
-            self.catalog = cat
-            self.apps = {a.id: a for a in cat.apps}
+            self._catalog = cat
+            self._apps = {a.id: a for a in cat.apps}
             self.push_custom()
             out = []
             for a in cat.apps:
@@ -111,13 +111,13 @@ class Api:
     def push_custom(self, select: str = ""):
         customs = core.load_custom_apps()
         for a in customs:
-            self.apps[a.id] = a
+            self._apps[a.id] = a
         self.push("custom", {"apps": [self._custom_json(a) for a in customs], "select": select})
 
     def pick_ipa(self):
         """系统「打开文件」对话框选 IPA（可多选）"""
-        paths = self.window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True,
-                                               file_types=("iOS 安装包 (*.ipa)", "所有文件 (*.*)")) if self.window else None
+        paths = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True,
+                                               file_types=("iOS 安装包 (*.ipa)", "所有文件 (*.*)")) if self._window else None
         if paths:
             self.add_ipas(list(paths))
 
@@ -138,7 +138,7 @@ class Api:
 
     def on_drop(self, e):
         """拖进窗口的文件（pywebview 的 DOM 事件里才有完整路径）"""
-        if self.busy:
+        if self._busy:
             return
         files = (e.get("dataTransfer") or {}).get("files") or []
         paths = [f.get("pywebviewFullPath") for f in files if f.get("pywebviewFullPath")]
@@ -152,18 +152,59 @@ class Api:
             self.add_ipas(ipas)
 
     def remove_custom(self, cid):
-        if self.busy:
+        if self._busy:
             return
         core.remove_custom_ipa(cid)
-        self.apps.pop(cid, None)
+        self._apps.pop(cid, None)
         self.push_custom()
+
+    def refresh(self):
+        """「刷新」：重新拉应用列表和每个 App 的最新版本，顺便让自动更新马上检查一轮"""
+        def work():
+            try:
+                cat = core.load_catalog()
+                for a in cat.apps:
+                    old = self._apps.get(a.id)
+                    if old and not old.local_path:
+                        a.icon_bytes = old.icon_bytes
+                self._catalog = cat
+                for a in cat.apps:
+                    self._apps[a.id] = a
+                out = []
+                for a in cat.apps:
+                    ic = core.load_icon(cat, a)
+                    out.append({"id": a.id, "name": a.name, "subtitle": a.subtitle, "description": a.description,
+                                "min_ios": a.min_ios, "homepage": a.homepage,
+                                "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""})
+                self.push("catalog", {"apps": out, "source": cat.source})
+            except Exception as e:  # noqa: BLE001
+                log.warning("refresh catalog failed: %s", e)
+            changed = []
+            for a in list(self._apps.values()):
+                if a.local_path:
+                    continue
+                before = a.latest_version
+                try:
+                    core.resolve_latest(a)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("resolve %s failed: %s", a.id, e)
+                self.push("app_version", {"id": a.id, "version": a.latest_version,
+                                          "size": a.asset_size, "has_asset": bool(a.asset_url)})
+                if before and a.latest_version and a.latest_version != before:
+                    changed.append(f"{a.name} v{a.latest_version}")
+            self.push_custom()
+            self._pilot._last_update_check = __import__("time").time()
+            self._pilot.poke()
+            self.push_installs()
+            self.push("refreshed", "发现新版本：" + "、".join(changed) if changed else "已是最新")
+        threading.Thread(target=work, daemon=True).start()
 
     def devices(self):
         devs = core.list_devices()
         key = ",".join(d.udid for d in devs)
         if key != getattr(self, "_last_devs", None):
             self._last_devs = key
-            self.pilot.poke()
+            self._pilot.poke()
             log.info("devices: %s", [(d.name, d.model) for d in devs])
         return [{"udid": d.udid, "name": d.name, "via": d.model} for d in devs]
 
@@ -186,16 +227,16 @@ class Api:
         self._twofa_ready.set()
 
     def install(self, app_id, udid):
-        if self.busy:
+        if self._busy:
             return
-        a = self.apps.get(app_id)
+        a = self._apps.get(app_id)
         if not a:
             return
-        if not self.sign_lock.acquire(blocking=False):
+        if not self._sign_lock.acquire(blocking=False):
             self.push("toast", "正在后台自动续签，稍等一下再装")
             return
-        self.busy = True
-        self.cancel.clear()
+        self._busy = True
+        self._cancel.clear()
         threading.Thread(target=self._install_flow, args=(a, udid), daemon=True).start()
 
     # MARK: 安装流程
@@ -251,7 +292,7 @@ class Api:
                     raise core.SignError("这个 IPA 文件找不到了，请重新添加")
                 self.push("step", {"step": "download", "state": "ok", "note": "本地文件"})
             else:
-                ipa = core.download_ipa(a, lambda p: self.push("progress", {"step": "download", "value": p}), self.cancel)
+                ipa = core.download_ipa(a, lambda p: self.push("progress", {"step": "download", "value": p}), self._cancel)
                 self.push("step", {"step": "download", "state": "ok", "note": f"v{a.latest_version}"})
             step = "install"
             self.push("step", {"step": "install", "state": "run"})
@@ -269,27 +310,27 @@ class Api:
             self.push("step", {"step": step, "state": "err"})
             self.push("error", msg)
         finally:
-            self.busy = False
-            self.sign_lock.release()
+            self._busy = False
+            self._sign_lock.release()
 
     # MARK: 已安装 / 自动续签
 
     def _installs_json(self):
         out = []
         for key, r in sorted(autopilot.load().items(), key=lambda kv: kv[1].get("expires_at", 0)):
-            a = self.apps.get(r["app_id"])
+            a = self._apps.get(r["app_id"])
             out.append({"key": key, "name": r["name"], "device": r["device"], "version": r.get("version", ""),
                         "days_left": round(autopilot.days_left(r), 2), "expires_at": r.get("expires_at", 0),
                         "auto": r.get("auto", True), "error": r.get("last_error", ""),
                         "latest": (a.latest_version if a and not a.local_path else "") or "",
-                        "running": self.pilot.current == key, "app_id": r["app_id"]})
+                        "running": self._pilot.current == key, "app_id": r["app_id"]})
         return out
 
     def push_installs(self):
-        self.push("installs", {"items": self._installs_json(), "enabled": self.pilot.enabled})
+        self.push("installs", {"items": self._installs_json(), "enabled": self._pilot.enabled})
 
     def installs(self):
-        return {"items": self._installs_json(), "enabled": self.pilot.enabled}
+        return {"items": self._installs_json(), "enabled": self._pilot.enabled}
 
     def set_auto(self, key, on):
         autopilot.set_auto(key, on)
@@ -300,10 +341,10 @@ class Api:
         self.push_installs()
 
     def set_autopilot(self, on):
-        self.pilot.enabled = bool(on)
+        self._pilot.enabled = bool(on)
         core.set_pref("autopilot", bool(on))
         if on:
-            self.pilot.poke()
+            self._pilot.poke()
         self.push_installs()
 
     def autostart(self):
@@ -322,8 +363,8 @@ class Api:
                     r["expires_at"] = min(r.get("expires_at", 0), __import__("time").time())
                     r["last_error"] = ""
             autopilot._save(d)
-        self.pilot.enabled = True
-        self.pilot.poke()
+        self._pilot.enabled = True
+        self._pilot.poke()
         self.push_installs()
 
     def _pilot_event(self, ev, info):
@@ -348,9 +389,9 @@ def main():
     win = webview.create_window(f"一键装 {core.VERSION}", url=str(html), js_api=api,
                                 width=900, height=640, min_size=(780, 560), background_color="#111214",
                                 minimized=background)
-    api.window = win
-    api.pilot.enabled = core.get_pref("autopilot", True)
-    api.pilot.start()
+    api._window = win
+    api._pilot.enabled = core.get_pref("autopilot", True)
+    api._pilot.start()
 
     def bind_drop(window):
         from webview.dom import DOMEventHandler

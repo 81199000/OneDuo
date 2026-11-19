@@ -1,0 +1,73 @@
+; 一键装 Windows 安装包（Inno Setup 6）
+;   ISCC.exe /DAppVersion=0.1.0 packaging\OneTap.iss
+; 前置：dist\一键装\（PyInstaller onedir 输出）、packaging\drivers\AppleMobileDeviceSupport64.msi
+; 苹果手机驱动来自苹果官方 iTunes 安装包（iTunes64Setup.exe /extract 得到），只装驱动不装 iTunes。
+
+#ifndef AppVersion
+  #define AppVersion "0.1.0"
+#endif
+
+[Setup]
+AppId={{8F3C1A52-7E4B-4C61-9B2A-6D1E0F4A7C93}
+AppName=一键装
+AppVersion={#AppVersion}
+AppVerName=一键装 {#AppVersion}
+AppPublisher=OneTapInstall
+DefaultDirName={autopf}\OneTapInstall
+DefaultGroupName=一键装
+DisableProgramGroupPage=yes
+OutputDir=..\dist
+OutputBaseFilename=OneTapInstall-{#AppVersion}-windows-x64-setup
+SetupIconFile=OneTap.ico
+UninstallDisplayIcon={app}\一键装.exe
+Compression=lzma2/max
+SolidCompression=yes
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+; 驱动要装系统服务，必须管理员
+PrivilegesRequired=admin
+WizardStyle=modern
+CloseApplications=yes
+
+[Languages]
+Name: "chs"; MessagesFile: "ChineseSimplified.isl"
+Name: "en"; MessagesFile: "compiler:Default.isl"
+
+[CustomMessages]
+chs.Driver=正在安装苹果手机驱动（Apple Mobile Device Support）…
+en.Driver=Installing Apple Mobile Device Support…
+chs.DesktopIcon=创建桌面快捷方式
+en.DesktopIcon=Create a desktop shortcut
+chs.AutoStart=开机自动启动（后台自动续签，推荐）
+en.AutoStart=Start at login (auto-renew in background, recommended)
+chs.Launch=打开一键装
+en.Launch=Launch OneTapInstall
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:DesktopIcon}"
+Name: "autostart"; Description: "{cm:AutoStart}"
+
+[Files]
+Source: "..\dist\一键装\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "drivers\AppleMobileDeviceSupport64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedAppleDriver
+
+[Icons]
+Name: "{autoprograms}\一键装"; Filename: "{app}\一键装.exe"
+Name: "{autodesktop}\一键装"; Filename: "{app}\一键装.exe"; Tasks: desktopicon
+Name: "{userstartup}\一键装"; Filename: "{app}\一键装.exe"; Parameters: "--background"; Tasks: autostart
+
+[Run]
+Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\AppleMobileDeviceSupport64.msi"" /qn /norestart"; StatusMsg: "{cm:Driver}"; Flags: waituntilterminated; Check: NeedAppleDriver
+Filename: "{app}\一键装.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
+[Code]
+{ 已经装了 iTunes / Apple 设备 App / 驱动：服务在就不重复装 }
+function NeedAppleDriver: Boolean;
+var
+  S: String;
+begin
+  Result := not RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\Apple Mobile Device Service', 'ImagePath', S);
+end;

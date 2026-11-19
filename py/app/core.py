@@ -246,7 +246,7 @@ def list_devices() -> list[Device]:
     if not exe:
         return []
     try:
-        out = subprocess.run([str(exe), "device", "--list"], capture_output=True, text=True, timeout=15,
+        out = subprocess.run([str(exe), "device", "--list"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
                              env={**os.environ, "RUST_LOG": "error"},
                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
     except Exception:  # noqa: BLE001
@@ -310,7 +310,7 @@ class PlumeRunner:
     def run(self, args: list[str], ask_2fa: Optional[Callable[[str], Optional[str]]] = None,
             stdin_lines: Optional[list[str]] = None) -> str:
         self.proc = subprocess.Popen([str(self.exe), *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT, text=True, bufsize=1, env=self._env(),
+                                     stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1, env=self._env(),
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         out = []
         for line in stdin_lines or []:
@@ -344,7 +344,7 @@ def saved_accounts() -> list[str]:
     if not exe:
         return []
     try:
-        r = subprocess.run([str(exe), "account", "list"], capture_output=True, text=True, timeout=10,
+        r = subprocess.run([str(exe), "account", "list"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
                            env={**os.environ, "RUST_LOG": "info", "NO_COLOR": "1"},
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception:  # noqa: BLE001
@@ -365,7 +365,7 @@ def session_ok() -> bool:
     if not exe:
         return False
     try:
-        r = subprocess.run([str(exe), "account", "certificates"], capture_output=True, text=True, timeout=30,
+        r = subprocess.run([str(exe), "account", "certificates"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
                            stdin=subprocess.DEVNULL, env={**os.environ, "RUST_LOG": "error", "NO_COLOR": "1"},
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return r.returncode == 0
@@ -443,11 +443,15 @@ def _app_launch_cmd() -> list[str]:
     return [str(exe), str(Path(__file__).resolve().parent.parent / "main.py"), "--background"]
 
 
+def _win_startup_lnk() -> Path:
+    return Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "一键装.lnk"
+
+
 def autostart_enabled() -> bool:
     if sys.platform == "darwin":
         return (Path.home() / "Library/LaunchAgents" / f"{_AGENT_LABEL}.plist").exists()
     if sys.platform == "win32":
-        return (Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs\Startup\一键装.cmd").exists()
+        return _win_startup_lnk().exists()
     return False
 
 
@@ -462,12 +466,19 @@ def set_autostart(on: bool) -> None:
         else:
             f.unlink(missing_ok=True)
     elif sys.platform == "win32":
-        f = Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs\Startup\一键装.cmd"
+        # 跟安装包里「开机自动启动」是同一个快捷方式（启动文件夹\一键装.lnk），开关互通
+        lnk = _win_startup_lnk()
         if on:
-            cmd = " ".join(f'"{c}"' if " " in c else c for c in _app_launch_cmd())
-            f.write_text(f'@start "" {cmd}\r\n', encoding="gbk", errors="replace")
+            cmd = _app_launch_cmd()
+            target, args = cmd[0], " ".join(f'"{c}"' if " " in c else c for c in cmd[1:])
+            ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK);"
+                  "$s.TargetPath=$env:TGT;$s.Arguments=$env:ARGS;"
+                  "$s.WorkingDirectory=(Split-Path $env:TGT);$s.Save()")
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], timeout=20,
+                           capture_output=True, env={**os.environ, "LNK": str(lnk), "TGT": target, "ARGS": args},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         else:
-            f.unlink(missing_ok=True)
+            lnk.unlink(missing_ok=True)
 
 
 # MARK: 自己添加的 IPA
@@ -674,7 +685,14 @@ def system_label() -> str:
 
 
 def is_cn() -> bool:
-    """中文系统默认走 Gitee 下载"""
+    """中文系统默认走 Gitee 下载。Windows 上 locale 给的是 'Chinese (Simplified)_China'，要看系统界面语言 ID"""
     import locale
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            # 0x04 = 中文（简/繁），低 10 位是主语言
+            return ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF == 0x04
+        except Exception:  # noqa: BLE001
+            pass
     lang = (os.environ.get("LANG") or locale.getlocale()[0] or "").lower()
-    return lang.startswith("zh")
+    return lang.startswith("zh") or lang.startswith("chinese")
