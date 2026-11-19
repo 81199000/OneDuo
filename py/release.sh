@@ -32,7 +32,7 @@ git -C "$ROOT" add py/app/core.py py/packaging/OneTap.iss
 git -C "$ROOT" commit -qm "release: 一键签 $VER" || true
 
 print "2/6 Mac 打包 + 签名 + 公证"
-./build_mac.sh
+if [[ -n $ONEDUO_SKIP_MAC && -f dist/OneDuo-$VER-macos-arm64.zip ]]; then echo "（沿用已公证的 dist/OneDuo-$VER-macos-arm64.zip）"; else ./build_mac.sh; fi
 [[ -f $MAC ]] || die "没有 $MAC"
 spctl --assess --type execute "dist/一键签.app" || die "Mac 包没通过系统检查（签名 / 公证）"
 
