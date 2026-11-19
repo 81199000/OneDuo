@@ -195,6 +195,12 @@ $("pw").addEventListener("keydown", e => e.key === "Enter" && loginDone(true));
 $("code").addEventListener("keydown", e => e.key === "Enter" && codeDone(true));
 $("code").addEventListener("input", e => e.target.value.length === 6 && codeDone(true));
 
+async function doLogout() {
+  if (S.busy) return;
+  if (!confirm("退出这个 Apple ID？下次安装需要重新登录。")) return;
+  await api().logout(); $("acct").textContent = "";
+}
+
 async function pollDevices() {
   try {
     const list = await api().devices();
@@ -211,7 +217,7 @@ async function pollDevices() {
                                      : "未连接手机：用数据线把 iPhone 连到这台电脑，解锁后点「信任」";
     if (S.sel && !S.busy) setStep("device", S.dev ? "ok" : "", S.dev ? S.dev.name : "");
     const acc = await api().accounts();
-    $("acct").textContent = acc.length ? `Apple ID：${acc[0]}` : "";
+    $("acct").innerHTML = acc.length ? `Apple ID：${esc(acc[0])} <span class="link" style="margin-left:6px" onclick="doLogout()">退出</span>` : "";
   } catch (e) {}
   setTimeout(pollDevices, 2500);
 }

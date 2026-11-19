@@ -335,15 +335,45 @@ class PlumeRunner:
 
 
 def saved_accounts() -> list[str]:
+    """已登录过的 Apple ID（plumesign 存的是登录令牌，不存密码），当前选中的排第一"""
     exe = plumesign_path()
     if not exe:
         return []
     try:
-        out = subprocess.run([str(exe), "account", "list"], capture_output=True, text=True, timeout=10,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
-        return re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", out)
+        r = subprocess.run([str(exe), "account", "list"], capture_output=True, text=True, timeout=10,
+                           env={**os.environ, "RUST_LOG": "info", "NO_COLOR": "1"},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception:  # noqa: BLE001
         return []
+    # 日志打在 stderr，两路都看
+    out = (r.stdout or "") + "\n" + (r.stderr or "")
+    accts = []
+    for line in out.splitlines():
+        m = re.search(r"([\w.+-]+@[\w-]+\.[\w.]+)", line)
+        if m and m.group(1) not in accts:
+            (accts.insert(0, m.group(1)) if "(selected)" in line else accts.append(m.group(1)))
+    return accts
+
+
+def session_ok() -> bool:
+    """存的登录令牌还能不能用（拿它去苹果拉一次团队列表）；过期了才需要重新输密码"""
+    exe = plumesign_path()
+    if not exe:
+        return False
+    try:
+        r = subprocess.run([str(exe), "account", "certificates"], capture_output=True, text=True, timeout=30,
+                           stdin=subprocess.DEVNULL, env={**os.environ, "RUST_LOG": "error", "NO_COLOR": "1"},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return r.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def logout() -> None:
+    exe = plumesign_path()
+    if exe:
+        subprocess.run([str(exe), "account", "logout"], capture_output=True, timeout=15, stdin=subprocess.DEVNULL,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
 def login(apple_id: str, password: str, on_line, ask_2fa) -> None:
