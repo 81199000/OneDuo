@@ -3,9 +3,9 @@
 #   ./packaging/win_remote.sh sync                  只同步
 #   ./packaging/win_remote.sh run '<powershell>'    同步后在 C:\onetap\src\py 里跑
 #   ./packaging/win_remote.sh exec '<powershell>'   不同步直接跑
-# 依赖：Mac 免密 ssh 用户@Windows机器IP（Windows 测试机）
+# 依赖：Mac 能免密 ssh 到那台 Windows（export ONETAP_WIN=用户@IP）
 set -e
-W=${ONETAP_WIN:-用户@Windows机器IP}
+W=${ONETAP_WIN:?先 export ONETAP_WIN=用户@Windows机器IP}
 SSHO=(-4 -o BatchMode=yes -o ConnectTimeout=8)
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 S=${TMPDIR:-/tmp}
