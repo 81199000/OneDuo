@@ -2,11 +2,23 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.1.0",
-    "notes": "首个版本：一键签名安装 DouDuo / GuoDuo",
+    "latest": "0.1.1",
+    "notes": "新增：有新版本自动弹窗，点「立即更新」自动下载、安装并重新打开\n新增：验证码没收到可以「重新发送」或「改用短信」\n优化：Mac 版已通过苹果公证，双击即可打开",
     "download": {
       "github": "https://github.com/81199000/OneDuo/releases/latest",
       "gitee": "https://gitee.com/remon8/oneduo/releases"
+    },
+    "assets": {
+      "macos": {
+        "name": "OneDuo-0.1.1-macos-arm64.zip",
+        "size": 17326996,
+        "sha256": "ef19be37e3f2d9c285571d105e012604237cbb1c557f0e87ad98cbfce4229a65"
+      },
+      "windows": {
+        "name": "OneDuo-0.1.1-windows-x64-setup.exe",
+        "size": 49679331,
+        "sha256": "afd1fa5f071ce94b08e3e0716c54a4ed941a15e7ac4f152f9a994beb6c6a6001"
+      }
     }
   },
   "apps": [
