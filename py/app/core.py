@@ -303,11 +303,11 @@ class PlumeRunner:
 
     def _env(self):
         env = dict(os.environ)
-        env.setdefault("RUST_LOG", "info")
+        env["RUST_LOG"] = "info"   # 验证码提示、安装进度都靠 info 日志
         env["NO_COLOR"] = "1"
         return env
 
-    def run(self, args: list[str], ask_2fa: Optional[Callable[[str], Optional[str]]] = None,
+    def run(self, args: list[str], ask_2fa: Optional[Callable[[str, list], Optional[str]]] = None,
             stdin_lines: Optional[list[str]] = None) -> str:
         self.proc = subprocess.Popen([str(self.exe), *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1, env=self._env(),
@@ -316,12 +316,25 @@ class PlumeRunner:
         for line in stdin_lines or []:
             self.proc.stdin.write(line + "\n")
         self.proc.stdin.flush()
+        kind, phones = None, []
         for line in self.proc.stdout:
             line = re.sub(r"\x1b\[[0-9;]*m", "", line.rstrip("\n"))
             out.append(line)
             self.on_line(line)
-            if line.startswith("PLUME_NEED_2FA") and ask_2fa:
-                code = ask_2fa(line.split()[-1])
+            if line.startswith("PLUME_NEED_2FA"):
+                kind, phones = line.split()[-1], []
+                continue
+            if line.startswith("PLUME_SMS_PHONES "):
+                # "<id>:<尾号>|<id>:<尾号>"
+                for item in line[len("PLUME_SMS_PHONES "):].split("|"):
+                    pid, _, tail = item.partition(":")
+                    if pid.strip().isdigit():
+                        phones.append({"id": int(pid), "tail": tail.strip()})
+                continue
+            # 验证码提示那一行（plumesign 打完号码列表才打它）出现时才问用户，这样号码已经拿全了
+            if kind and ask_2fa and ("Enter" in line and ("code" in line or "2FA" in line)):
+                code = ask_2fa(kind, phones)
+                kind = None
                 if code is None:
                     self.proc.kill()
                     raise SignError("已取消登录")

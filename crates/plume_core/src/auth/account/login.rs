@@ -100,6 +100,9 @@ impl Account {
                         TwoFactorAction::SendSms(id) => {
                             response = _self.send_sms_2fa_to_devices(id).await?
                         }
+                        TwoFactorAction::ResendDevice => {
+                            response = _self.send_2fa_to_devices().await?
+                        }
                     }
                 }
                 LoginState::NeedsSMS2FA => {
@@ -124,6 +127,9 @@ impl Account {
                         }
                         TwoFactorAction::SendSms(id) => {
                             response = _self.send_sms_2fa_to_devices(id).await?
+                        }
+                        TwoFactorAction::ResendDevice => {
+                            response = _self.send_2fa_to_devices().await?
                         }
                     }
                 }

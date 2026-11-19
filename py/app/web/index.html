@@ -108,6 +108,10 @@
   .dialog input { width: 100%; background: #111214; color: var(--text); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 12px; font: inherit; font-size: 15px; -webkit-user-select: text; user-select: text; }
   .dialog input.code { letter-spacing: 8px; text-align: center; font-size: 22px; }
+  .codealt { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 13px; }
+  .codealt .link { color: var(--accent); }
+  .codealt .link.off { color: var(--dim); pointer-events: none; }
+  #smsBox { display: contents; }
   .dialog .row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
   .dialog button { border: 0; border-radius: 10px; padding: 9px 20px; font: inherit; font-weight: 600; cursor: pointer; }
   .dialog .ghost { background: transparent; color: var(--sub); }
@@ -152,8 +156,12 @@
 
 <div class="mask" id="codeMask"><div class="dialog">
   <h3>双重认证验证码</h3>
-  <p id="codeTip">Apple 已向你的手机发送了 6 位验证码</p>
+  <p id="codeTip">Apple 已向你的设备发送了 6 位验证码</p>
   <input id="code" class="code" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+  <div class="codealt" id="codeAlt">
+    <span class="link" id="resendBtn" onclick="codeSend('resend')">没收到？重新发送</span>
+    <span id="smsBox"></span>
+  </div>
   <div class="row"><button class="ghost" onclick="codeDone(false)">取消</button>
     <button class="primary" onclick="codeDone(true)">确定</button></div>
 </div></div>
@@ -182,7 +190,7 @@ window.onEvent = (ev, d) => {
   else if (ev === "progress") { const b = document.querySelector(".bar"); if (b) { b.style.display = "block"; b.firstChild.style.width = (d.value*100).toFixed(0)+"%"; } }
   else if (ev === "log") msg(d);
   else if (ev === "need_login") { $("loginMask").classList.add("show"); setTimeout(() => $("user").focus(), 50); }
-  else if (ev === "need_2fa") { $("codeTip").textContent = d === "sms" ? "Apple 已通过短信发送 6 位验证码" : "Apple 已向你登录这个 Apple ID 的设备发送了 6 位验证码"; $("code").value = ""; $("codeMask").classList.add("show"); setTimeout(() => $("code").focus(), 50); }
+  else if (ev === "need_2fa") { openCode(d); }
   else if (ev === "done") finish(true);
   else if (ev === "error") finish(false, d);
   else if (ev === "self_update") { const u = $("upd"); u.textContent = `有新版本 v${d.version} ↗`; u.style.display = "block"; u.onclick = () => api().open_url(d.url); }
@@ -313,7 +321,34 @@ function loginDone(ok) {
   api().submit_login(ok ? $("user").value.trim() : "", ok ? $("pw").value : "");
   $("pw").value = "";
 }
-function codeDone(ok) { $("codeMask").classList.remove("show"); api().submit_2fa(ok ? $("code").value.trim() : ""); }
+let codeTimer = null;
+function openCode(d) {
+  const kind = d.kind || d, phones = d.phones || [];
+  $("codeTip").textContent = kind === "sms" ? "Apple 已通过短信发送了 6 位验证码" : "Apple 已向你登录这个 Apple ID 的 iPhone / iPad / Mac 发送了验证码，在设备上点「允许」后会显示 6 位数字";
+  $("code").value = "";
+  // 短信：每个受信任手机号一个按钮（多个号码时能选）
+  $("smsBox").innerHTML = phones.map(p => `<span class="link" onclick="codeSend('sms:${p.id}')">${kind === "sms" && phones.length === 1 ? "" : "改用"}短信发到尾号 ${esc(p.tail)}</span>`).join("");
+  if (kind === "sms" && phones.length === 1) $("smsBox").innerHTML = "";
+  $("resendBtn").textContent = kind === "sms" ? "没收到？重新发短信" : "没收到？重新发送到设备";
+  // 重发 30 秒冷却，免得连点被苹果限流
+  const btn = $("resendBtn"); btn.classList.add("off"); let left = 30;
+  clearInterval(codeTimer);
+  btn.dataset.label = btn.textContent; btn.textContent = `${btn.dataset.label}（${left}s）`;
+  codeTimer = setInterval(() => { left--; if (left <= 0) { clearInterval(codeTimer); btn.classList.remove("off"); btn.textContent = btn.dataset.label; } else btn.textContent = `${btn.dataset.label}（${left}s）`; }, 1000);
+  $("codeMask").classList.add("show"); setTimeout(() => $("code").focus(), 50);
+}
+function codeSend(action) {
+  clearInterval(codeTimer);
+  $("codeMask").classList.remove("show");
+  msg(action.startsWith("sms") ? "正在发送短信验证码…" : "正在重新发送验证码…");
+  api().submit_2fa(action);
+}
+
+function codeDone(ok) {
+  const v = $("code").value.trim();
+  if (ok && !/^\d{6}$/.test(v)) { $("code").focus(); return; }
+  clearInterval(codeTimer); $("codeMask").classList.remove("show"); api().submit_2fa(ok ? v : "");
+}
 $("pw").addEventListener("keydown", e => e.key === "Enter" && loginDone(true));
 $("code").addEventListener("keydown", e => e.key === "Enter" && codeDone(true));
 $("code").addEventListener("input", e => e.target.value.length === 6 && codeDone(true));

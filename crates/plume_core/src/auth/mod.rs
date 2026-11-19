@@ -171,6 +171,8 @@ pub enum TwoFactorAction {
     SubmitCode(String),
     /// Request a fresh code be sent via SMS to the trusted phone number with this id
     SendSms(u32),
+    /// 一键装：重新推送验证码到受信任设备（手机没弹出来时）
+    ResendDevice,
 }
 
 #[derive(Deserialize)]
