@@ -29,10 +29,10 @@
       "description": "适配 iPhone Duo 折叠屏、iPad 与普通 iPhone。推荐随机刷剧、弹幕热评、半折叠操作台、离线下载。",
       "bundle_id": "me.rrmm.hongguo",
       "icon": "icons/guoduo.png",
-      "repo": "81199000/HongGuo",
+      "repo": "81199000/GuoDuo",
       "asset_pattern": "GuoDuo-*-unsigned.ipa",
       "min_ios": "18.4",
-      "homepage": "https://github.com/81199000/HongGuo"
+      "homepage": "https://github.com/81199000/GuoDuo"
     }
   ]
 }
