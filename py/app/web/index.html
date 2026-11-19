@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>一键装</title>
+<style>
+  :root {
+    --bg: #111214; --card: #1c1d21; --card-hi: #26272c; --line: #2c2d33;
+    --text: #f2f2f3; --sub: #a0a1a8; --dim: #6c6d74; --accent: #ff3b30; --ok: #34c759;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    -webkit-user-select: none; user-select: none; overflow: hidden; }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; padding: 22px 24px 16px; gap: 16px; }
+  header { display: flex; align-items: baseline; gap: 14px; }
+  header h1 { font-size: 26px; font-weight: 700; letter-spacing: .5px; }
+  header p { color: var(--sub); font-size: 14px; }
+  header .upd { margin-left: auto; color: var(--accent); font-size: 13px; cursor: pointer; display: none; }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 18px; min-height: 0; }
+  .list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+  .list .src { color: var(--dim); font-size: 12px; margin-bottom: 2px; }
+  .item { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 14px; background: var(--card);
+    cursor: pointer; transition: background .12s; }
+  .item:hover { background: #222328; }
+  .item.on { background: var(--card-hi); box-shadow: inset 0 0 0 1px #3a3b42; }
+  .icon { width: 56px; height: 56px; border-radius: 13px; flex: none; object-fit: cover; background: #2a2b30; }
+  .icon.big { width: 76px; height: 76px; border-radius: 17px; }
+  .item h3 { font-size: 16px; font-weight: 600; }
+  .item .s { color: var(--sub); font-size: 12.5px; }
+  .item .v { color: var(--dim); font-size: 12px; }
+  .detail { background: var(--card); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; min-height: 0; }
+  .empty { margin: auto; color: var(--sub); font-size: 16px; }
+  .head { display: flex; gap: 16px; align-items: center; }
+  .head h2 { font-size: 24px; font-weight: 700; }
+  .meta { color: var(--sub); font-size: 13px; }
+  .link { color: var(--accent); font-size: 13px; cursor: pointer; }
+  .desc { color: var(--sub); margin: 16px 0 6px; font-size: 14px; }
+  .steps { list-style: none; margin-top: 12px; display: flex; flex-direction: column; gap: 9px; }
+  .steps li { display: flex; align-items: center; gap: 10px; color: var(--sub); }
+  .steps li.on, .steps li.ok, .steps li.err { color: var(--text); }
+  .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--dim); flex: none; position: relative; }
+  .ok .dot { background: var(--ok); border-color: var(--ok); }
+  .on .dot { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .err .dot { border-color: var(--accent); background: var(--accent); }
+  .err .dot::after { content: "✕"; position: absolute; inset: -3px 0 0 0; text-align: center; font-size: 11px; color: #fff; font-weight: 700; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .note { color: var(--dim); font-size: 12.5px; }
+  .bar { height: 4px; background: #2a2b30; border-radius: 2px; overflow: hidden; margin: 14px 0 0; display: none; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .msg { margin-top: 14px; font-size: 13.5px; white-space: pre-line; min-height: 22px; color: var(--sub); }
+  .msg.err { color: var(--accent); } .msg.ok { color: var(--ok); }
+  .actions { margin-top: auto; display: flex; justify-content: flex-end; padding-top: 16px; }
+  button.go { background: var(--accent); color: #fff; border: 0; border-radius: 12px; font-size: 16px; font-weight: 700;
+    padding: 12px 34px; cursor: pointer; font-family: inherit; }
+  button.go:disabled { background: #3a3b40; color: #8a8b92; cursor: default; }
+  footer { display: flex; align-items: center; gap: 10px; color: var(--sub); font-size: 13px; }
+  footer .d { width: 10px; height: 10px; border-radius: 50%; background: var(--dim); }
+  footer .d.on { background: var(--ok); }
+  footer select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 4px 8px; font: inherit; font-size: 13px; }
+  footer .acct { margin-left: auto; color: var(--dim); font-size: 12px; }
+  /* 弹窗 */
+  .mask { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; }
+  .mask.show { display: flex; }
+  .dialog { width: 380px; background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .dialog h3 { font-size: 18px; margin-bottom: 6px; }
+  .dialog p { color: var(--sub); font-size: 13px; margin-bottom: 14px; }
+  .dialog label { display: block; color: var(--sub); font-size: 12.5px; margin: 10px 0 4px; }
+  .dialog input { width: 100%; background: #111214; color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; font: inherit; font-size: 15px; -webkit-user-select: text; user-select: text; }
+  .dialog input.code { letter-spacing: 8px; text-align: center; font-size: 22px; }
+  .dialog .row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .dialog button { border: 0; border-radius: 10px; padding: 9px 20px; font: inherit; font-weight: 600; cursor: pointer; }
+  .dialog .ghost { background: transparent; color: var(--sub); }
+  .dialog .primary { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>一键装</h1>
+    <p>用自己的 Apple ID 免费签名，直接装到 iPhone / iPad</p>
+    <span class="upd" id="upd"></span>
+  </header>
+  <main>
+    <div class="list" id="list"><div class="src">正在读取应用列表…</div></div>
+    <div class="detail" id="detail"><div class="empty">← 选一个 App</div></div>
+  </main>
+  <footer>
+    <span class="d" id="devdot"></span>
+    <span id="devtext">未连接手机：用数据线把 iPhone 连到这台电脑，解锁后点「信任」</span>
+    <select id="devsel" style="display:none"></select>
+    <span class="acct" id="acct"></span>
+  </footer>
+</div>
+
+<div class="mask" id="loginMask"><div class="dialog">
+  <h3>登录 Apple ID</h3>
+  <p>账号密码直接发给苹果，本软件不保存密码。建议用一个小号。</p>
+  <label>Apple ID（邮箱或手机号）</label><input id="user" autocomplete="off" spellcheck="false">
+  <label>密码</label><input id="pw" type="password">
+  <div class="row"><button class="ghost" onclick="loginDone(false)">取消</button>
+    <button class="primary" onclick="loginDone(true)">登录</button></div>
+</div></div>
+
+<div class="mask" id="codeMask"><div class="dialog">
+  <h3>双重认证验证码</h3>
+  <p id="codeTip">Apple 已向你的手机发送了 6 位验证码</p>
+  <input id="code" class="code" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+  <div class="row"><button class="ghost" onclick="codeDone(false)">取消</button>
+    <button class="primary" onclick="codeDone(true)">确定</button></div>
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const S = { apps: [], sel: null, devices: [], dev: null, busy: false };
+const STEPS = [["device","连接手机"],["account","登录 Apple ID"],["download","下载安装包"],["install","签名并安装"],["trust","在手机上信任"]];
+const api = () => window.pywebview.api;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+window.onEvent = (ev, d) => {
+  if (ev === "catalog") renderList(d);
+  else if (ev === "catalog_error") $("list").innerHTML = `<div class="src" style="color:var(--accent)">应用列表加载失败：${esc(d)}</div>`;
+  else if (ev === "app_version") { Object.assign(S.apps.find(a => a.id === d.id) || {}, d); renderList(); if (S.sel === d.id && !S.busy) renderDetail(); }
+  else if (ev === "step") setStep(d.step, d.state, d.note);
+  else if (ev === "progress") { const b = document.querySelector(".bar"); if (b) { b.style.display = "block"; b.firstChild.style.width = (d.value*100).toFixed(0)+"%"; } }
+  else if (ev === "log") msg(d);
+  else if (ev === "need_login") { $("loginMask").classList.add("show"); setTimeout(() => $("user").focus(), 50); }
+  else if (ev === "need_2fa") { $("codeTip").textContent = d === "sms" ? "Apple 已通过短信发送 6 位验证码" : "Apple 已向你登录这个 Apple ID 的设备发送了 6 位验证码"; $("code").value = ""; $("codeMask").classList.add("show"); setTimeout(() => $("code").focus(), 50); }
+  else if (ev === "done") finish(true);
+  else if (ev === "error") finish(false, d);
+  else if (ev === "self_update") { const u = $("upd"); u.textContent = `有新版本 v${d.version} ↗`; u.style.display = "block"; u.onclick = () => api().open_url(d.url); }
+};
+
+function renderList(d) {
+  if (d) { S.apps = d.apps; S.source = d.source; }
+  $("list").innerHTML = `<div class="src">共 ${S.apps.length} 个 App · 列表来自 ${esc(S.source)}</div>` + S.apps.map(a => `
+    <div class="item ${a.id === S.sel ? "on" : ""}" onclick="select('${a.id}')">
+      <img class="icon" src="${a.icon}" alt="">
+      <div><h3>${esc(a.name)}</h3><div class="s">${esc(a.subtitle)}</div>
+      <div class="v">${a.version ? "最新 v" + esc(a.version) : (a.has_asset === false ? "暂无安装包" : "读取版本…")}</div></div>
+    </div>`).join("");
+}
+
+function select(id) { if (S.busy) return; S.sel = id; renderList(); renderDetail(); }
+
+function renderDetail() {
+  const a = S.apps.find(x => x.id === S.sel); if (!a) return;
+  const size = a.size ? ` · ${(a.size/1048576).toFixed(1)} MB` : "";
+  const ver = a.version ? `v${esc(a.version)}` : (a.has_asset === false ? "暂无安装包" : "读取版本…");
+  $("detail").innerHTML = `
+    <div class="head"><img class="icon big" src="${a.icon}" alt="">
+      <div><h2>${esc(a.name)}</h2><div class="meta">${ver}${size} · 需要 iOS ${esc(a.min_ios)}+</div>
+      ${a.homepage ? `<span class="link" onclick="api().open_url('${esc(a.homepage)}')">项目主页</span>` : ""}</div></div>
+    <div class="desc">${esc(a.description)}</div>
+    <ul class="steps">${STEPS.map(([k,t]) => `<li id="st-${k}"><span class="dot"></span><span>${t}</span><span class="note"></span></li>`).join("")}</ul>
+    <div class="bar"><i></i></div>
+    <div class="msg" id="msg"></div>
+    <div class="actions"><button class="go" id="go" onclick="go()" ${a.has_asset === false ? "disabled" : ""}>${a.has_asset === false ? "暂无安装包" : "一键安装"}</button></div>`;
+  if (S.dev) setStep("device", "ok", S.dev.name);
+}
+
+function setStep(k, state, note) {
+  const li = $("st-" + k); if (!li) return;
+  li.className = state === "run" ? "on" : state;
+  if (note !== undefined) li.querySelector(".note").textContent = note || "";
+  if (state !== "run") { const b = document.querySelector(".bar"); if (b) b.style.display = "none"; }
+}
+function msg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
+
+function go() {
+  if (!S.dev) { setStep("device", "err", "没找到手机"); msg("① 用数据线把 iPhone 连到这台电脑\n② 解锁手机，弹出「要信任此电脑吗？」点「信任」，输入锁屏密码\n连上后底部会显示手机名字，再点一键安装。", "err"); return; }
+  S.busy = true; renderDetail();
+  $("go").disabled = true; $("go").textContent = "安装中…";
+  api().install(S.sel, S.dev.udid);
+}
+
+function finish(ok, err) {
+  S.busy = false;
+  const g = $("go"); if (g) { g.disabled = false; g.textContent = "再装一次"; }
+  if (ok) {
+    setStep("trust", "on");
+    msg("✅ 已装到手机！第一次打开前，在手机上：\n① 设置 → 通用 → VPN 与设备管理 → 点你的 Apple ID → 信任\n② 如果提示需要开发者模式：设置 → 隐私与安全性 → 开发者模式 → 打开，按提示重启\n免费 Apple ID 签的 App 7 天后会过期，到时打开本软件再装一次即可（数据不丢）。", "ok");
+  } else msg("没装上：" + err, "err");
+}
+
+function loginDone(ok) {
+  $("loginMask").classList.remove("show");
+  api().submit_login(ok ? $("user").value.trim() : "", ok ? $("pw").value : "");
+  $("pw").value = "";
+}
+function codeDone(ok) { $("codeMask").classList.remove("show"); api().submit_2fa(ok ? $("code").value.trim() : ""); }
+$("pw").addEventListener("keydown", e => e.key === "Enter" && loginDone(true));
+$("code").addEventListener("keydown", e => e.key === "Enter" && codeDone(true));
+$("code").addEventListener("input", e => e.target.value.length === 6 && codeDone(true));
+
+async function pollDevices() {
+  try {
+    const list = await api().devices();
+    S.devices = list;
+    if (!S.dev || !list.find(d => d.udid === S.dev.udid)) S.dev = list[0] || null;
+    const sel = $("devsel");
+    if (list.length > 1) {
+      sel.style.display = "";
+      sel.innerHTML = list.map(d => `<option value="${d.udid}" ${S.dev && d.udid === S.dev.udid ? "selected" : ""}>${esc(d.name)}（${d.via === "USB" ? "数据线" : "Wi‑Fi"}）</option>`).join("");
+      sel.onchange = () => { S.dev = list.find(d => d.udid === sel.value); if (!S.busy) renderDetail(); };
+    } else sel.style.display = "none";
+    $("devdot").className = "d" + (S.dev ? " on" : "");
+    $("devtext").textContent = S.dev ? (list.length > 1 ? "安装到：" : `已连接：${S.dev.name}（${S.dev.via === "USB" ? "数据线" : "Wi‑Fi"}）`)
+                                     : "未连接手机：用数据线把 iPhone 连到这台电脑，解锁后点「信任」";
+    if (S.sel && !S.busy) setStep("device", S.dev ? "ok" : "", S.dev ? S.dev.name : "");
+    const acc = await api().accounts();
+    $("acct").textContent = acc.length ? `Apple ID：${acc[0]}` : "";
+  } catch (e) {}
+  setTimeout(pollDevices, 2500);
+}
+
+window.addEventListener("pywebviewready", () => { api().load(); pollDevices(); });
+</script>
+</body>
+</html>

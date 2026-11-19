@@ -390,12 +390,13 @@ impl fmt::Display for Device {
 
 pub async fn get_device_for_id(device_id: &str) -> Result<Device, Error> {
     let mut usbmuxd = UsbmuxdConnection::default().await?;
-    let usbmuxd_device = usbmuxd
-        .get_devices()
-        .await?
+    // 一键装：上游只比 usbmuxd 的连接序号（device_id），传 UDID 永远找不到；两种都认，USB 优先于 Wi‑Fi
+    let mut devices = usbmuxd.get_devices().await?;
+    devices.sort_by_key(|d| !matches!(d.connection_type, idevice::usbmuxd::Connection::Usb));
+    let usbmuxd_device = devices
         .into_iter()
-        .find(|d| d.device_id.to_string() == device_id)
-        .ok_or_else(|| Error::Other(format!("Device ID {device_id} not found")))?;
+        .find(|d| d.udid.eq_ignore_ascii_case(device_id) || d.device_id.to_string() == device_id)
+        .ok_or_else(|| Error::Other(format!("Device {device_id} not found")))?;
 
     Ok(Device::new(usbmuxd_device).await)
 }
