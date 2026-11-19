@@ -390,6 +390,86 @@ def sign_and_install(ipa: Path, udid: str, on_line) -> None:
 
 # MARK: 自身更新
 
+# MARK: 偏好 / 系统通知
+
+def _prefs_path() -> Path:
+    return data_dir() / "prefs.json"
+
+
+def get_pref(key: str, default=None):
+    try:
+        return json.loads(_prefs_path().read_text("utf-8")).get(key, default)
+    except Exception:  # noqa: BLE001
+        return default
+
+
+def set_pref(key: str, value) -> None:
+    try:
+        d = json.loads(_prefs_path().read_text("utf-8"))
+    except Exception:  # noqa: BLE001
+        d = {}
+    d[key] = value
+    _prefs_path().write_text(json.dumps(d, ensure_ascii=False), "utf-8")
+
+
+def notify(title: str, body: str) -> None:
+    """系统通知（Mac 通知中心 / Windows 托盘气泡），失败就算了"""
+    try:
+        if sys.platform == "darwin":
+            esc = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
+            subprocess.run(["osascript", "-e", f'display notification "{esc(body)}" with title "{esc(title)}"'],
+                           timeout=5, capture_output=True)
+        elif sys.platform == "win32":
+            ps = ("[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] > $null;"
+                  "$x=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(1);"
+                  f"$t=$x.GetElementsByTagName('text');$t.Item(0).AppendChild($x.CreateTextNode('{title}'))>$null;"
+                  f"$t.Item(1).AppendChild($x.CreateTextNode('{body}'))>$null;"
+                  "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('一键装').Show([Windows.UI.Notifications.ToastNotification]::new($x))")
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], timeout=10, capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# MARK: 开机自启（只负责登录后在后台挂着做自动续签）
+
+_AGENT_LABEL = "me.rrmm.onetapinstall.autostart"
+
+
+def _app_launch_cmd() -> list[str]:
+    exe = Path(sys.executable).resolve()
+    if getattr(sys, "frozen", False):
+        return [str(exe), "--background"]
+    return [str(exe), str(Path(__file__).resolve().parent.parent / "main.py"), "--background"]
+
+
+def autostart_enabled() -> bool:
+    if sys.platform == "darwin":
+        return (Path.home() / "Library/LaunchAgents" / f"{_AGENT_LABEL}.plist").exists()
+    if sys.platform == "win32":
+        return (Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs\Startup\一键装.cmd").exists()
+    return False
+
+
+def set_autostart(on: bool) -> None:
+    if sys.platform == "darwin":
+        import plistlib
+        f = Path.home() / "Library/LaunchAgents" / f"{_AGENT_LABEL}.plist"
+        if on:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(plistlib.dumps({"Label": _AGENT_LABEL, "ProgramArguments": _app_launch_cmd(),
+                                          "RunAtLoad": True, "ProcessType": "Interactive"}))
+        else:
+            f.unlink(missing_ok=True)
+    elif sys.platform == "win32":
+        f = Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs\Startup\一键装.cmd"
+        if on:
+            cmd = " ".join(f'"{c}"' if " " in c else c for c in _app_launch_cmd())
+            f.write_text(f'@start "" {cmd}\r\n', encoding="gbk", errors="replace")
+        else:
+            f.unlink(missing_ok=True)
+
+
 # MARK: 自己添加的 IPA
 
 def _plist_any(raw: bytes) -> dict:

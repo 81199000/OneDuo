@@ -17,7 +17,7 @@ from pathlib import Path
 
 import webview
 
-from . import core
+from . import autopilot, core
 
 # 日志：~/Library/Logs/OneTapInstall.log（Windows 在 %APPDATA%\\OneTapInstall），闪退也能事后查
 LOG_PATH = (Path.home() / "Library" / "Logs" / "OneTapInstall.log") if sys.platform == "darwin" else core.data_dir() / "OneTapInstall.log"
@@ -36,6 +36,8 @@ class Api:
         self.apps: dict[str, core.AppEntry] = {}
         self.cancel = threading.Event()
         self.busy = False
+        self.sign_lock = threading.Lock()   # 手动安装和自动续签共用，同一时刻只跑一个签名
+        self.pilot = autopilot.Autopilot(lambda: dict(self.apps), self.sign_lock, self._pilot_event)
         self._twofa = None
         self._twofa_ready = threading.Event()
         self._login = None
@@ -84,6 +86,7 @@ class Api:
                             "min_ios": a.min_ios, "homepage": a.homepage,
                             "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""})
             self.push("catalog", {"apps": out, "source": cat.source})
+            self.push_installs()
             for a in cat.apps:
                 try:
                     core.resolve_latest(a)
@@ -160,6 +163,7 @@ class Api:
         key = ",".join(d.udid for d in devs)
         if key != getattr(self, "_last_devs", None):
             self._last_devs = key
+            self.pilot.poke()
             log.info("devices: %s", [(d.name, d.model) for d in devs])
         return [{"udid": d.udid, "name": d.name, "via": d.model} for d in devs]
 
@@ -186,6 +190,9 @@ class Api:
             return
         a = self.apps.get(app_id)
         if not a:
+            return
+        if not self.sign_lock.acquire(blocking=False):
+            self.push("toast", "正在后台自动续签，稍等一下再装")
             return
         self.busy = True
         self.cancel.clear()
@@ -252,6 +259,9 @@ class Api:
             core.sign_and_install(ipa, udid, on_line)
             self.push("step", {"step": "install", "state": "ok"})
             log.info("installed %s %s to %s", a.id, a.latest_version, udid)
+            dev_name = next((d.name for d in core.list_devices() if d.udid == udid), "iPhone")
+            autopilot.record(udid, dev_name, a)
+            self.push_installs()
             self.push("done")
         except Exception as e:  # noqa: BLE001
             log.exception("install failed")
@@ -260,6 +270,71 @@ class Api:
             self.push("error", msg)
         finally:
             self.busy = False
+            self.sign_lock.release()
+
+    # MARK: 已安装 / 自动续签
+
+    def _installs_json(self):
+        out = []
+        for key, r in sorted(autopilot.load().items(), key=lambda kv: kv[1].get("expires_at", 0)):
+            a = self.apps.get(r["app_id"])
+            out.append({"key": key, "name": r["name"], "device": r["device"], "version": r.get("version", ""),
+                        "days_left": round(autopilot.days_left(r), 2), "expires_at": r.get("expires_at", 0),
+                        "auto": r.get("auto", True), "error": r.get("last_error", ""),
+                        "latest": (a.latest_version if a and not a.local_path else "") or "",
+                        "running": self.pilot.current == key, "app_id": r["app_id"]})
+        return out
+
+    def push_installs(self):
+        self.push("installs", {"items": self._installs_json(), "enabled": self.pilot.enabled})
+
+    def installs(self):
+        return {"items": self._installs_json(), "enabled": self.pilot.enabled}
+
+    def set_auto(self, key, on):
+        autopilot.set_auto(key, on)
+        self.push_installs()
+
+    def forget_install(self, key):
+        autopilot.forget(key)
+        self.push_installs()
+
+    def set_autopilot(self, on):
+        self.pilot.enabled = bool(on)
+        core.set_pref("autopilot", bool(on))
+        if on:
+            self.pilot.poke()
+        self.push_installs()
+
+    def autostart(self):
+        return core.autostart_enabled()
+
+    def set_autostart(self, on):
+        core.set_autostart(bool(on))
+        return core.autostart_enabled()
+
+    def renew_now(self):
+        """「立即全部续签」：把所有记录标记为马上到期，交给后台一轮跑完"""
+        with autopilot._lock:
+            d = autopilot.load()
+            for r in d.values():
+                if r.get("auto", True):
+                    r["expires_at"] = min(r.get("expires_at", 0), __import__("time").time())
+                    r["last_error"] = ""
+            autopilot._save(d)
+        self.pilot.enabled = True
+        self.pilot.poke()
+        self.push_installs()
+
+    def _pilot_event(self, ev, info):
+        if ev == "renew_start":
+            self.push("pilot", {"state": "run", "text": f"{'更新' if info['why'] == 'update' else '续签'} {info['name']} → {info['device']}…"})
+        elif ev == "renew_done":
+            self.push("pilot", {"state": "ok", "text": f"已{'更新' if info['why'] == 'update' else '续签'} {info['name']}（{info['device']}），又能用 7 天"})
+            core.notify("一键装", f"{info['name']} 已自动{'更新到 v' + info['version'] if info['why'] == 'update' else '续签'}（{info['device']}）")
+        elif ev == "renew_fail":
+            self.push("pilot", {"state": "err", "text": f"{info['name']} 自动续签没成功：{info['error']}"})
+        self.push_installs()
 
 
 def main():
@@ -269,9 +344,13 @@ def main():
     html = core.resource_dir() / "app" / "web" / "index.html"
     if not html.exists():
         html = Path(__file__).resolve().parent / "web" / "index.html"
+    background = "--background" in sys.argv   # 开机自启：最小化挂着，只做自动续签
     win = webview.create_window(f"一键装 {core.VERSION}", url=str(html), js_api=api,
-                                width=900, height=640, min_size=(780, 560), background_color="#111214")
+                                width=900, height=640, min_size=(780, 560), background_color="#111214",
+                                minimized=background)
     api.window = win
+    api.pilot.enabled = core.get_pref("autopilot", True)
+    api.pilot.start()
 
     def bind_drop(window):
         from webview.dom import DOMEventHandler
