@@ -17,5 +17,9 @@ rm -rf "/Applications/一键装.app"
 ENVF=${ONEDUO_ENV:-$HOME/.config/oneduo/sign.env}
 [ -f "$ENVF" ] && source "$ENVF"
 ./packaging/sign_mac.sh dist/一键签.app
-ditto dist/一键签.app "/Applications/一键签.app"
+# 已签名的 App 不能原地覆盖里面的文件（macOS「App 管理」保护）：整个挪走再放新的
+pkill -f "/Applications/一键签.app/Contents/MacOS/OneTap" || true
+rm -rf "/Applications/一键签.app.old"
+[ -d "/Applications/一键签.app" ] && mv "/Applications/一键签.app" "/Applications/一键签.app.old"
+ditto dist/一键签.app "/Applications/一键签.app" && rm -rf "/Applications/一键签.app.old"
 echo "✅ /Applications/一键签.app"
