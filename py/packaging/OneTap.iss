@@ -62,6 +62,8 @@ Name: "{userstartup}\一键装"; Filename: "{app}\一键装.exe"; Parameters: "-
 [Run]
 Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\AppleMobileDeviceSupport64.msi"" /qn /norestart"; StatusMsg: "{cm:Driver}"; Flags: waituntilterminated; Check: NeedAppleDriver
 Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\Bonjour64.msi"" /qn /norestart"; StatusMsg: "{cm:Bonjour}"; Flags: waituntilterminated; Check: NeedBonjour
+; 关键：苹果手机服务启动时 Bonjour 还没装，就永远不会去 Wi‑Fi 上找手机（实测：重启这个服务后 15 秒内认到）
+Filename: "{sys}\cmd.exe"; Parameters: "/c net stop ""Apple Mobile Device Service"" & net start ""Apple Mobile Device Service"""; StatusMsg: "{cm:Bonjour}"; Flags: runhidden waituntilterminated
 Filename: "{app}\一键装.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
