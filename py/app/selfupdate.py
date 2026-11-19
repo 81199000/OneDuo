@@ -53,6 +53,9 @@ def asset_for(cat) -> Optional[dict]:
 
 
 def _urls(ver: str, name: str) -> list[str]:
+    base = os.environ.get("ONETAP_UPDATE_BASE")   # 只用于测试：从本地目录 / 内网地址拿安装包
+    if base:
+        return [base.rstrip("/") + "/" + name]
     gh = GITHUB_DL.format(repo=core.CATALOG_REPO, ver=ver, name=name)
     gt = GITEE_DL.format(repo=GITEE_REPO, ver=ver, name=name)
     return [gt, gh] if core.is_cn() else [gh, gt]
@@ -130,7 +133,7 @@ def _launch_windows(setup: Path) -> None:
         "$ErrorActionPreference = 'SilentlyContinue'\r\n"
         f"while (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\r\n"
         "$ok = $false\r\n"
-        f"try {{ $p = Start-Process -FilePath '{q(setup)}' -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOCANCEL' "
+        f"try {{ $p = Start-Process -FilePath '{q(setup)}' -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOCANCEL','/CLOSEAPPLICATIONS','/FORCECLOSEAPPLICATIONS' "
         "-Verb RunAs -Wait -PassThru -ErrorAction Stop; $ok = ($p.ExitCode -eq 0) } catch { $ok = $false }\r\n"
         f"if (-not $ok) {{ Start-Process -FilePath '{q(exe)}' }}\r\n"
         "Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force\r\n",
