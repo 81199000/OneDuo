@@ -60,6 +60,7 @@ def plumesign_path() -> Optional[Path]:
     exe = "plumesign.exe" if sys.platform == "win32" else "plumesign"
     for p in [
         resource_dir() / "bin" / exe,
+        Path(sys.executable).resolve().parent.parent / "Frameworks" / "bin" / exe,   # macOS .app
         resource_dir() / "target" / "release" / exe,
         resource_dir() / "target" / "debug" / exe,
     ]:

@@ -17,3 +17,6 @@ cargo-sources.json
 __pycache__/
 *.pyc
 py/.venv/
+py/build/
+py/dist/
+py/packaging/OneTap.iconset/

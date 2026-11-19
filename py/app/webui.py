@@ -6,14 +6,27 @@
 from __future__ import annotations
 
 import base64
+import faulthandler
 import json
+import logging
+import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
 import webview
 
 from . import core
+
+# 日志：~/Library/Logs/OneTapInstall.log（Windows 在 %APPDATA%\\OneTapInstall），闪退也能事后查
+LOG_PATH = (Path.home() / "Library" / "Logs" / "OneTapInstall.log") if sys.platform == "darwin" else core.data_dir() / "OneTapInstall.log"
+logging.basicConfig(filename=LOG_PATH, level=logging.INFO, format="%(asctime)s %(threadName)s %(levelname)s %(message)s")
+log = logging.getLogger("onetap")
+_fault_file = open(LOG_PATH, "a")
+faulthandler.enable(_fault_file)
+sys.excepthook = lambda t, v, tb: log.critical("uncaught", exc_info=(t, v, tb))
+threading.excepthook = lambda a: log.critical("uncaught in %s", a.thread, exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
 
 
 class Api:
@@ -27,14 +40,28 @@ class Api:
         self._twofa_ready = threading.Event()
         self._login = None
         self._login_ready = threading.Event()
+        self._last_push: dict[str, float] = {}
 
     # MARK: Python → JS
 
     def push(self, event: str, data=None):
-        if self.window:
+        """后台线程 → 界面。日志类消息节流（签名时每秒上百行，全推会把网页桥压垮）；推送失败只记日志不崩"""
+        if not self.window:
+            return
+        if event in ("log", "progress"):
+            now = time.monotonic()
+            if now - self._last_push.get(event, 0) < 0.15:
+                return
+            self._last_push[event] = now
+        try:
             self.window.evaluate_js(f"window.onEvent({json.dumps(event)}, {json.dumps(data, ensure_ascii=False)})")
+        except Exception:  # noqa: BLE001
+            log.exception("push %s failed", event)
 
     # MARK: JS → Python
+
+    def auto_install(self):
+        return __import__("os").environ.get("ONETAP_AUTOINSTALL", "")
 
     def version(self):
         return core.VERSION
@@ -70,7 +97,12 @@ class Api:
         threading.Thread(target=work, daemon=True).start()
 
     def devices(self):
-        return [{"udid": d.udid, "name": d.name, "via": d.model} for d in core.list_devices()]
+        devs = core.list_devices()
+        key = ",".join(d.udid for d in devs)
+        if key != getattr(self, "_last_devs", None):
+            self._last_devs = key
+            log.info("devices: %s", [(d.name, d.model) for d in devs])
+        return [{"udid": d.udid, "name": d.name, "via": d.model} for d in devs]
 
     def accounts(self):
         return core.saved_accounts()
@@ -115,7 +147,7 @@ class Api:
         return self._twofa
 
     def _install_flow(self, a: core.AppEntry, udid: str):
-        def log(line):
+        def on_line(line):
             if "PLUME_" in line:
                 return
             short = line.split("] ")[-1].strip()
@@ -142,7 +174,7 @@ class Api:
                 if not creds:
                     raise core.SignError("已取消登录")
                 self.push("log", "正在登录 Apple ID…（只发给苹果，本软件不保存密码）")
-                core.login(creds[0], creds[1], log, self._ask_2fa)
+                core.login(creds[0], creds[1], on_line, self._ask_2fa)
                 accts = core.saved_accounts()
             self.push("step", {"step": "account", "state": "ok", "note": accts[0] if accts else ""})
             step = "download"
@@ -152,10 +184,12 @@ class Api:
             step = "install"
             self.push("step", {"step": "install", "state": "run"})
             self.push("log", "正在签名并安装到手机，请保持手机解锁、数据线不要拔…")
-            core.sign_and_install(ipa, udid, log)
+            core.sign_and_install(ipa, udid, on_line)
             self.push("step", {"step": "install", "state": "ok"})
+            log.info("installed %s %s to %s", a.id, a.latest_version, udid)
             self.push("done")
         except Exception as e:  # noqa: BLE001
+            log.exception("install failed")
             msg = str(e) if isinstance(e, core.SignError) else core.friendly(str(e))
             self.push("step", {"step": step, "state": "err"})
             self.push("error", msg)
@@ -164,9 +198,14 @@ class Api:
 
 
 def main():
+    log.info("start %s %s plumesign=%s", core.VERSION, core.system_label(), core.plumesign_path())
     api = Api()
-    html = Path(__file__).resolve().parent / "web" / "index.html"
+    # 打包后网页在资源目录（PyInstaller _MEIPASS），开发时在本文件旁边
+    html = core.resource_dir() / "app" / "web" / "index.html"
+    if not html.exists():
+        html = Path(__file__).resolve().parent / "web" / "index.html"
     win = webview.create_window(f"一键装 {core.VERSION}", url=str(html), js_api=api,
                                 width=900, height=640, min_size=(780, 560), background_color="#111214")
     api.window = win
     webview.start(debug=bool(__import__("os").environ.get("ONETAP_DEBUG")))
+    log.info("exit normally")
