@@ -112,6 +112,11 @@
   .codealt .link { color: var(--accent); }
   .codealt .link.off { color: var(--dim); pointer-events: none; }
   #smsBox { display: contents; }
+  #updMask .dim { color: var(--dim); font-size: 13px; margin: 4px 0; }
+  #updMask .err { color: var(--accent); font-size: 13px; margin: 4px 0; }
+  .updnotes { white-space: pre-wrap; font-size: 13px; line-height: 1.6; max-height: 180px; overflow: auto; margin: 10px 0; color: var(--text); }
+  #updBar { display: block; height: 6px; border-radius: 3px; background: var(--line, #2a2c30); overflow: hidden; margin: 8px 0 4px; }
+  #updBar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .dialog .row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
   .dialog button { border: 0; border-radius: 10px; padding: 9px 20px; font: inherit; font-weight: 600; cursor: pointer; }
   .dialog .ghost { background: transparent; color: var(--sub); }
@@ -141,6 +146,16 @@
 
 <div class="drop" id="drop">松手添加 IPA</div>
 <div class="toast" id="toast"></div>
+
+<div class="mask" id="updMask"><div class="dialog">
+  <h3 id="updTitle">一键签有新版本</h3>
+  <p id="updVer" class="dim"></p>
+  <div id="updNotes" class="updnotes"></div>
+  <div class="bar" id="updBar" style="display:none"><div></div></div>
+  <p id="updMsg" class="dim" style="min-height:1.2em"></p>
+  <div class="row"><button class="ghost" id="updLater" onclick="closeUpdate()">以后再说</button>
+    <button class="primary" id="updGo" onclick="doUpdate()">立即更新</button></div>
+</div></div>
 
 <div class="mask" id="loginMask"><div class="dialog">
   <h3>登录 Apple ID</h3>
@@ -193,7 +208,8 @@ window.onEvent = (ev, d) => {
   else if (ev === "need_2fa") { openCode(d); }
   else if (ev === "done") finish(true);
   else if (ev === "error") finish(false, d);
-  else if (ev === "self_update") { const u = $("upd"); u.textContent = `有新版本 v${d.version} ↗`; u.style.display = "block"; u.onclick = () => api().open_url(d.url); }
+  else if (ev === "self_update") { openUpdate(d); }
+  else if (ev === "self_update_progress") { updProgress(d); }
 };
 
 function renderList(d) {
@@ -342,6 +358,44 @@ function codeSend(action) {
   $("codeMask").classList.remove("show");
   msg(action.startsWith("sms") ? "正在发送短信验证码…" : "正在重新发送验证码…");
   api().submit_2fa(action);
+}
+
+let UPD = null;
+function openUpdate(d) {
+  UPD = d;
+  const u = $("upd"); u.textContent = `有新版本 v${d.version}`; u.style.display = "block"; u.onclick = () => { openUpdate.manual = true; openUpdate(d); openUpdate.manual = false; };
+  $("updTitle").textContent = "一键签有新版本";
+  $("updVer").textContent = `v${d.current} → v${d.version}`;
+  $("updNotes").textContent = d.notes || "";
+  $("updBar").style.display = "none"; $("updMsg").textContent = ""; $("updMsg").className = "dim";
+  $("updGo").disabled = false; $("updLater").disabled = false;
+  $("updGo").textContent = d.auto ? "立即更新" : "去下载";
+  $("updLater").textContent = "以后再说"; $("updLater").onclick = closeUpdate;
+  // 每次打开一键签都弹；「以后再说」只在这次运行里不再弹（标题栏的提示点了还能打开）
+  if (!openUpdate.manual && closeUpdate.skipped === d.version) return;
+  $("updMask").classList.add("show");
+}
+function closeUpdate() {
+  if (UPD) closeUpdate.skipped = UPD.version;
+  $("updMask").classList.remove("show");
+}
+function doUpdate() {
+  if (!UPD) return;
+  if (!UPD.auto) { api().open_url(UPD.url); closeUpdate(); return; }
+  $("updGo").disabled = true; $("updLater").disabled = true; $("updGo").textContent = "更新中…";
+  $("updBar").style.display = "block"; $("updBar").firstChild.style.width = "0%";
+  $("updMsg").textContent = "正在下载新版…";
+  api().self_update();
+}
+function updProgress(d) {
+  if (d.stage === "wait") $("updMsg").textContent = "正在给手机签名，签完马上更新…";
+  else if (d.stage === "download") { $("updBar").firstChild.style.width = Math.round(d.p * 100) + "%"; $("updMsg").textContent = `正在下载新版… ${Math.round(d.p * 100)}%`; }
+  else if (d.stage === "install") { $("updBar").firstChild.style.width = "100%"; $("updMsg").textContent = (navigator.userAgent.includes("Windows") ? "下载完成。Windows 问「是否允许更改」时点「是」，装完会自动重新打开。" : "下载完成，正在安装，一键签会自动重新打开…"); }
+  else if (d.stage === "error") {
+    $("updMsg").textContent = "更新失败：" + d.msg; $("updMsg").className = "err";
+    $("updGo").disabled = false; $("updLater").disabled = false; $("updGo").textContent = "重试";
+    $("updLater").textContent = "去网页下载"; $("updLater").onclick = () => { api().open_url(UPD.url); $("updMask").classList.remove("show"); };
+  }
 }
 
 function codeDone(ok) {
