@@ -127,7 +127,8 @@
       <li>本软件<b>不保存密码</b>，只在你电脑上保存苹果返回的登录凭证，可随时点「退出」清除。</li>
       <li>签名核心基于开源项目 <span class="link" onclick="api().open_url('https://github.com/claration/Impactor')">Impactor</span>（MIT 协议），代码公开可查。</li>
     </ul>
-    <div class="safe-note">登录时还需一份"设备身份"数据，由公共开源服务获取，这一步不包含账号和密码。建议使用 Apple ID 小号。</div>
+    <div class="safe-note">另外，苹果要求登录时附带一份"模拟设备"信息，这份信息由一个公共开源服务器提供。它只负责生成设备信息，<b>看不到你的账号和密码</b>。</div>
+    <div class="safe-note">💡 建议用 Apple ID 小号：免费签名会在账号里生成开发证书、登记你的手机，免费账号还有数量限制（同时最多 3 个 App，证书会互相顶掉）。用小号不影响你主号的 iCloud、购买记录。</div>
   </div>
   <label>Apple ID（邮箱或手机号）</label><input id="user" autocomplete="off" spellcheck="false">
   <label>密码</label><input id="pw" type="password">
