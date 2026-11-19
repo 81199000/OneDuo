@@ -1,0 +1,18 @@
+/dist
+/tests
+/target
+/upload
+/.flatpak-builder
+/.flatpak-out
+/shared-modules
+/.direnv
+
+*.exe
+*.DS_Store
+state.plist
+.zsign_cache
+cargo-sources.json
+
+# 一键装
+__pycache__/
+*.pyc

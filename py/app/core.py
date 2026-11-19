@@ -1,0 +1,363 @@
+"""一键装 · 核心逻辑（与界面无关，可单独测试）
+
+- 应用目录：从 GitHub / Gitee 拉 catalog/apps.json（谁先回来用谁），新 App 只要改这个文件
+- 下载：每个 App 读自己仓库 Releases 的最新 IPA
+- 签名安装：调用随包附带的 plumesign（Impactor 的命令行，MIT），
+  Apple ID 登录 / 证书 / 描述文件 / 注册设备 / 签名 / 装机全在它里面
+"""
+from __future__ import annotations
+
+import fnmatch
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Optional
+
+VERSION = "0.1.0"
+
+# 目录文件的几个镜像：GitHub raw、jsDelivr（国内较快）、Gitee raw
+CATALOG_URLS = [
+    "https://raw.githubusercontent.com/81199000/OneTapInstall/main/catalog/apps.json",
+    "https://cdn.jsdelivr.net/gh/81199000/OneTapInstall@main/catalog/apps.json",
+    "https://gitee.com/remon8/onetapinstall/raw/main/catalog/apps.json",
+]
+
+UA = f"OneTapInstall/{VERSION}"
+
+
+def data_dir() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    d = base / "OneTapInstall"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def resource_dir() -> Path:
+    """打包后（PyInstaller）资源在 sys._MEIPASS；开发时在仓库里"""
+    if getattr(sys, "_MEIPASS", None):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def plumesign_path() -> Optional[Path]:
+    exe = "plumesign.exe" if sys.platform == "win32" else "plumesign"
+    for p in [
+        resource_dir() / "bin" / exe,
+        resource_dir() / "target" / "release" / exe,
+        resource_dir() / "target" / "debug" / exe,
+    ]:
+        if p.exists():
+            return p
+    found = shutil.which("plumesign")
+    return Path(found) if found else None
+
+
+def _token() -> Optional[str]:
+    """开发期：私有仓库要用 token 下载（正式公开后不需要）"""
+    return os.environ.get("ONETAP_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+
+
+def http_get(url: str, timeout: float = 15, accept: Optional[str] = None) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    if accept:
+        req.add_header("Accept", accept)
+    tok = _token()
+    if tok and ("api.github.com" in url or "githubusercontent.com" in url):
+        req.add_header("Authorization", f"Bearer {tok}")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+# MARK: 应用目录
+
+@dataclass
+class AppEntry:
+    id: str
+    name: str
+    subtitle: str
+    description: str
+    bundle_id: str
+    icon: str
+    repo: str
+    asset_pattern: str
+    min_ios: str = ""
+    homepage: str = ""
+    # 运行时补
+    latest_version: Optional[str] = None
+    asset_url: Optional[str] = None
+    asset_api_url: Optional[str] = None
+    asset_size: int = 0
+    installed_version: Optional[str] = None
+    icon_bytes: Optional[bytes] = None
+
+
+@dataclass
+class Catalog:
+    apps: list[AppEntry]
+    installer_latest: str = VERSION
+    installer_notes: str = ""
+    installer_download: dict = field(default_factory=dict)
+    base_url: str = ""
+    source: str = ""
+
+
+def _parse_catalog(raw: bytes, base_url: str, source: str) -> Catalog:
+    j = json.loads(raw.decode("utf-8"))
+    keys = AppEntry.__dataclass_fields__.keys()
+    apps = [AppEntry(**{k: v for k, v in a.items() if k in keys}) for a in j.get("apps", [])]
+    inst = j.get("installer", {})
+    return Catalog(apps=apps, installer_latest=inst.get("latest", VERSION), installer_notes=inst.get("notes", ""),
+                   installer_download=inst.get("download", {}), base_url=base_url, source=source)
+
+
+def load_catalog() -> Catalog:
+    """几个镜像同时拉，谁先成功用谁；都失败就用本地（开发 / 离线）"""
+    local = os.environ.get("ONETAP_CATALOG")
+    if local:
+        p = Path(local)
+        return _parse_catalog(p.read_bytes(), p.parent.as_uri() + "/", "本地")
+
+    def fetch(url):
+        return url, http_get(url, timeout=8)
+
+    errors = []
+    with ThreadPoolExecutor(len(CATALOG_URLS)) as ex:
+        futs = [ex.submit(fetch, u) for u in CATALOG_URLS]
+        for f in as_completed(futs):
+            try:
+                url, raw = f.result()
+                cat = _parse_catalog(raw, url.rsplit("/", 1)[0] + "/", url.split("/")[2])
+                (data_dir() / "apps.json").write_bytes(raw)
+                return cat
+            except Exception as e:  # noqa: BLE001
+                errors.append(str(e))
+    cached = data_dir() / "apps.json"
+    if cached.exists():
+        return _parse_catalog(cached.read_bytes(), "", "上次缓存")
+    bundled = resource_dir() / "catalog" / "apps.json"
+    if bundled.exists():
+        return _parse_catalog(bundled.read_bytes(), bundled.parent.as_uri() + "/", "内置")
+    raise RuntimeError("应用列表加载失败：" + "；".join(errors[:2]))
+
+
+def load_icon(cat: Catalog, app: AppEntry) -> Optional[bytes]:
+    url = app.icon if app.icon.startswith(("http://", "https://", "file:")) else cat.base_url + app.icon
+    try:
+        if url.startswith("file:"):
+            return Path(urllib.request.url2pathname(url[5:])).read_bytes()
+        return http_get(url, timeout=10)
+    except Exception:  # noqa: BLE001
+        local = resource_dir() / "catalog" / app.icon
+        return local.read_bytes() if local.exists() else None
+
+
+def resolve_latest(app: AppEntry) -> None:
+    """读这个 App 仓库 Releases 的最新版本和 IPA 下载地址"""
+    j = json.loads(http_get(f"https://api.github.com/repos/{app.repo}/releases/latest", timeout=10,
+                            accept="application/vnd.github+json"))
+    app.latest_version = (j.get("tag_name") or "").lstrip("v") or None
+    for a in j.get("assets", []):
+        if fnmatch.fnmatch(a["name"], app.asset_pattern):
+            app.asset_url = a["browser_download_url"]
+            app.asset_api_url = a["url"]
+            app.asset_size = a.get("size", 0)
+            return
+
+
+def download_ipa(app: AppEntry, progress: Callable[[float], None], cancel: threading.Event) -> Path:
+    if not app.asset_url:
+        raise RuntimeError(f"{app.name} 还没有可下载的安装包")
+    out = data_dir() / "downloads" / f"{app.id}-{app.latest_version}.ipa"
+    out.parent.mkdir(exist_ok=True)
+    if out.exists() and app.asset_size and out.stat().st_size == app.asset_size:
+        progress(1.0)
+        return out
+    tok = _token()
+    if tok and app.asset_api_url:
+        req = urllib.request.Request(app.asset_api_url, headers={
+            "User-Agent": UA, "Accept": "application/octet-stream", "Authorization": f"Bearer {tok}"})
+    else:
+        req = urllib.request.Request(app.asset_url, headers={"User-Agent": UA})
+    tmp = out.with_suffix(".part")
+    with urllib.request.urlopen(req, timeout=30) as r, open(tmp, "wb") as f:
+        total = int(r.headers.get("Content-Length") or app.asset_size or 0)
+        got = 0
+        while True:
+            if cancel.is_set():
+                raise RuntimeError("已取消")
+            chunk = r.read(256 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
+            got += len(chunk)
+            if total:
+                progress(got / total)
+    tmp.replace(out)
+    progress(1.0)
+    return out
+
+
+# MARK: 手机
+
+@dataclass
+class Device:
+    udid: str
+    name: str
+    ios: str = ""
+    model: str = ""
+
+
+def list_devices() -> list[Device]:
+    """连着的 iPhone / iPad：问 plumesign（usbmuxd，和爱思助手同一条通道；Mac / Windows 一样）"""
+    exe = plumesign_path()
+    if not exe:
+        return []
+    try:
+        out = subprocess.run([str(exe), "device", "--list"], capture_output=True, text=True, timeout=15,
+                             env={**os.environ, "RUST_LOG": "error"},
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except Exception:  # noqa: BLE001
+        return []
+    devs = []
+    for line in out.splitlines():
+        if line.startswith("PLUME_DEVICE "):
+            udid, conn, name = (line[len("PLUME_DEVICE "):].split("\t") + ["", ""])[:3]
+            devs.append(Device(udid=udid, name=name or "iPhone", model=conn))
+    # 同一台手机 USB + WiFi 会各出一条，USB 优先
+    seen, uniq = set(), []
+    for d in sorted(devs, key=lambda d: d.model != "USB"):
+        if d.udid not in seen:
+            seen.add(d.udid)
+            uniq.append(d)
+    return uniq
+
+
+# MARK: 签名安装（plumesign 子进程）
+
+class SignError(RuntimeError):
+    pass
+
+
+_FRIENDLY = [
+    (r"Incorrect|-20101|invalid.*credentials|password", "Apple ID 或密码不对"),
+    (r"maximum number of apps|limit.*app ids|-7.*7.?day", "免费 Apple ID 7 天内最多注册 10 个 App ID，过几天再装或换个 Apple ID"),
+    (r"3 apps|maximum.*installed|too many", "免费 Apple ID 同时最多装 3 个自签 App，先删掉一个再装"),
+    (r"locked|PasswordProtected", "手机锁着屏，请解锁后保持亮屏"),
+    (r"Developer Mode|developer mode", "手机没打开开发者模式（设置 → 隐私与安全性 → 开发者模式）"),
+    (r"pair|Trust|trust", "手机还没信任这台电脑：在手机上点「信任」并输入锁屏密码"),
+    (r"No devices connected", "没找到手机：请用数据线连接，并解锁手机"),
+    (r"2FA|two.factor|verification", "验证码不对或已过期，重新获取"),
+]
+
+
+def friendly(msg: str) -> str:
+    for pat, text in _FRIENDLY:
+        if re.search(pat, msg, re.I):
+            return text
+    lines = [ln for ln in msg.strip().splitlines() if ln.strip()]
+    return lines[-1][-200:] if lines else "未知错误"
+
+
+class PlumeRunner:
+    """跑 plumesign，按行回调；遇到要验证码就回调 ask_2fa 拿到后写进 stdin"""
+
+    def __init__(self, on_line: Callable[[str], None]):
+        self.exe = plumesign_path()
+        if not self.exe:
+            raise SignError("找不到签名组件 plumesign")
+        self.on_line = on_line
+        self.proc: Optional[subprocess.Popen] = None
+
+    def _env(self):
+        env = dict(os.environ)
+        env.setdefault("RUST_LOG", "info")
+        env["NO_COLOR"] = "1"
+        return env
+
+    def run(self, args: list[str], ask_2fa: Optional[Callable[[str], Optional[str]]] = None,
+            stdin_lines: Optional[list[str]] = None) -> str:
+        self.proc = subprocess.Popen([str(self.exe), *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True, bufsize=1, env=self._env(),
+                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        out = []
+        for line in stdin_lines or []:
+            self.proc.stdin.write(line + "\n")
+        self.proc.stdin.flush()
+        for line in self.proc.stdout:
+            line = re.sub(r"\x1b\[[0-9;]*m", "", line.rstrip("\n"))
+            out.append(line)
+            self.on_line(line)
+            if line.startswith("PLUME_NEED_2FA") and ask_2fa:
+                code = ask_2fa(line.split()[-1])
+                if code is None:
+                    self.proc.kill()
+                    raise SignError("已取消登录")
+                self.proc.stdin.write(code.strip() + "\n")
+                self.proc.stdin.flush()
+        rc = self.proc.wait()
+        text = "\n".join(out)
+        if rc != 0:
+            raise SignError(friendly(text))
+        return text
+
+    def cancel(self):
+        if self.proc and self.proc.poll() is None:
+            self.proc.kill()
+
+
+def saved_accounts() -> list[str]:
+    exe = plumesign_path()
+    if not exe:
+        return []
+    try:
+        out = subprocess.run([str(exe), "account", "list"], capture_output=True, text=True, timeout=10,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        return re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", out)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def login(apple_id: str, password: str, on_line, ask_2fa) -> None:
+    PlumeRunner(on_line).run(["account", "login", "-u", apple_id, "-p", password], ask_2fa=ask_2fa)
+
+
+def sign_and_install(ipa: Path, udid: str, on_line) -> None:
+    PlumeRunner(on_line).run(["sign", "--apple-id", "-p", str(ipa), "--register-and-install", "--udid", udid])
+
+
+# MARK: 自身更新
+
+def newer(a: str, b: str) -> bool:
+    """a 比 b 新（按 . 分段数字比）"""
+    pa = [int(x) for x in re.findall(r"\d+", a)]
+    pb = [int(x) for x in re.findall(r"\d+", b)]
+    return pa > pb
+
+
+def system_label() -> str:
+    if sys.platform == "darwin":
+        return f"macOS {platform.mac_ver()[0]}"
+    if sys.platform == "win32":
+        return f"Windows {platform.release()}"
+    return platform.platform()
+
+
+def is_cn() -> bool:
+    """中文系统默认走 Gitee 下载"""
+    import locale
+    lang = (os.environ.get("LANG") or locale.getlocale()[0] or "").lower()
+    return lang.startswith("zh")

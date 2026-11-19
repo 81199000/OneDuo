@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "installer": {
+    "name": "一键装",
+    "latest": "0.1.0",
+    "notes": "首个版本：一键签名安装 DouDuo / GuoDuo",
+    "download": {
+      "github": "https://github.com/81199000/OneTapInstall/releases/latest",
+      "gitee": "https://gitee.com/remon8/onetapinstall/releases"
+    }
+  },
+  "apps": [
+    {
+      "id": "douduo",
+      "name": "DouDuo",
+      "subtitle": "原生 SwiftUI 的第三方抖音客户端",
+      "description": "适配 iPhone Duo 折叠屏、iPad 与普通 iPhone。推荐 / 关注 / 直播整页上下滑，四种界面，后台播放与锁屏控制。",
+      "bundle_id": "me.rrmm.douduo",
+      "icon": "icons/douduo.png",
+      "repo": "81199000/DouDuo",
+      "asset_pattern": "DouDuo-*-unsigned.ipa",
+      "min_ios": "26.0",
+      "homepage": "https://github.com/81199000/DouDuo"
+    },
+    {
+      "id": "guoduo",
+      "name": "GuoDuo",
+      "subtitle": "原生 SwiftUI 的红果短剧客户端",
+      "description": "适配 iPhone Duo 折叠屏、iPad 与普通 iPhone。推荐随机刷剧、弹幕热评、半折叠操作台、离线下载。",
+      "bundle_id": "me.rrmm.hongguo",
+      "icon": "icons/guoduo.png",
+      "repo": "81199000/HongGuo",
+      "asset_pattern": "GuoDuo-*-unsigned.ipa",
+      "min_ios": "18.4",
+      "homepage": "https://github.com/81199000/HongGuo"
+    }
+  ]
+}
