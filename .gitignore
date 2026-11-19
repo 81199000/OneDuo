@@ -13,7 +13,7 @@ state.plist
 .zsign_cache
 cargo-sources.json
 
-# 一键装
+# 一键签
 __pycache__/
 *.pyc
 py/.venv/

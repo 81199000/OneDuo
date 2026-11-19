@@ -1,5 +1,5 @@
 #!/bin/zsh
-# 打包 一键装.app 并装进「应用程序」
+# 打包 一键签.app 并装进「应用程序」
 #   ./build_mac.sh
 set -e
 cd "$(dirname "$0")"
@@ -9,7 +9,10 @@ env -i HOME=$HOME PATH=/usr/bin:/bin .venv/bin/python -m pip install -q -r requi
 [ -f packaging/OneTap.icns ] || { env -i HOME=$HOME PATH=/usr/bin:/bin /usr/local/bin/python3 packaging/make_icon.py; iconutil -c icns packaging/OneTap.iconset -o packaging/OneTap.icns; }
 rm -rf build dist
 env -i HOME=$HOME PATH=/usr/bin:/bin LANG=zh_CN.UTF-8 .venv/bin/python -m PyInstaller packaging/OneTap.spec --noconfirm
+pkill -f "一键签.app/Contents/MacOS/OneTap" || true
+# 改名前叫「一键装」：旧的删掉，免得应用程序里有两个
 pkill -f "一键装.app/Contents/MacOS/OneTap" || true
-ditto dist/一键装.app "/Applications/一键装.app"
-codesign --force --deep -s - "/Applications/一键装.app"
-echo "✅ /Applications/一键装.app"
+rm -rf "/Applications/一键装.app"
+ditto dist/一键签.app "/Applications/一键签.app"
+codesign --force --deep -s - "/Applications/一键签.app"
+echo "✅ /Applications/一键签.app"

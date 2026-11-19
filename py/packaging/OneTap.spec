@@ -1,4 +1,4 @@
-# PyInstaller 打包：macOS 出 一键装.app，Windows 出 一键装.exe（同一份 spec）
+# PyInstaller 打包：macOS 出 一键签.app，Windows 出 一键签.exe（同一份 spec）
 #   cd py && .venv/bin/python -m PyInstaller packaging/OneTap.spec --noconfirm
 # 随包：网页界面、内置应用列表（离线兜底）、plumesign 签名组件
 import sys
@@ -33,12 +33,12 @@ if sys.platform == "darwin":
     coll = COLLECT(exe, a.binaries, a.datas, name="OneTap")
     app = BUNDLE(
         coll,
-        name="一键装.app",
+        name="一键签.app",
         icon=str(ROOT / "packaging" / "OneTap.icns"),
         bundle_identifier="me.rrmm.onetapinstall",
         info_plist={
-            "CFBundleDisplayName": "一键装",
-            "CFBundleName": "一键装",
+            "CFBundleDisplayName": "一键签",
+            "CFBundleName": "一键签",
             "CFBundleShortVersionString": "0.1.0",
             "CFBundleVersion": "1",
             "LSMinimumSystemVersion": "11.0",
@@ -48,6 +48,6 @@ if sys.platform == "darwin":
     )
 else:
     # Windows：onedir（启动快，不用每次解压到临时目录），Inno Setup 再打成安装包
-    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="一键装", console=False,
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="一键签", console=False,
               icon=str(ROOT / "packaging" / "OneTap.ico"), version=None)
-    coll = COLLECT(exe, a.binaries, a.datas, name="一键装")
+    coll = COLLECT(exe, a.binaries, a.datas, name="一键签")
