@@ -222,7 +222,17 @@ async function pollDevices() {
   setTimeout(pollDevices, 2500);
 }
 
-window.addEventListener("pywebviewready", () => { api().load(); pollDevices(); });
+window.addEventListener("pywebviewready", async () => {
+  api().load(); pollDevices();
+  // 自检用：环境变量 ONETAP_AUTOINSTALL=<appid> 时，列表和手机就绪后自动点一键安装
+  const auto = await api().auto_install();
+  if (auto) {
+    const t = setInterval(() => {
+      const a = S.apps.find(x => x.id === auto);
+      if (a && a.version && S.dev) { clearInterval(t); select(auto); go(); }
+    }, 1000);
+  }
+});
 </script>
 </body>
 </html>
