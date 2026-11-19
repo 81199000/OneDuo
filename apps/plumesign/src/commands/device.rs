@@ -47,9 +47,20 @@ pub struct DeviceArgs {
     /// 一键装：列出连着的设备，一行一个 `PLUME_DEVICE <udid>\t<USB|WiFi>\t<name>`，不选、不装
     #[arg(short = 'l', long = "list")]
     pub list: bool,
+
+    /// 一键装：手机「通过 Wi‑Fi 连接」开关 on/off/status，输出 `PLUME_WIFI <udid>\t<on|off>`（需数据线 + --udid）
+    #[arg(long = "wifi", value_name = "on|off|status")]
+    pub wifi: Option<String>,
 }
 
 pub async fn execute(args: DeviceArgs) -> Result<()> {
+    if let Some(w) = args.wifi.as_deref() {
+        let udid = args.udid.clone().ok_or_else(|| anyhow::anyhow!("--wifi 需要 --udid"))?;
+        let set = match w { "on" => Some(true), "off" => Some(false), _ => None };
+        let cur = plume_utils::wifi_sync(&udid, set).await?;
+        println!("PLUME_WIFI {}\t{}", udid, if cur { "on" } else { "off" });
+        return Ok(());
+    }
     if args.list {
         let mut muxer = UsbmuxdConnection::default().await?;
         let devices = muxer.get_devices().await?;

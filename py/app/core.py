@@ -384,6 +384,24 @@ def login(apple_id: str, password: str, on_line, ask_2fa) -> None:
     PlumeRunner(on_line).run(["account", "login", "-u", apple_id, "-p", password], ask_2fa=ask_2fa)
 
 
+def wifi_sync(udid: str, on: Optional[bool] = None) -> Optional[bool]:
+    """手机的「通过 Wi‑Fi 连接」开关（存在手机上，换电脑也有效）。需要数据线连着。读不到返回 None"""
+    exe = plumesign_path()
+    if not exe:
+        return None
+    args = [str(exe), "device", "--udid", udid, "--wifi", {True: "on", False: "off", None: "status"}[on]]
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
+                           stdin=subprocess.DEVNULL, env={**os.environ, "RUST_LOG": "error"},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception:  # noqa: BLE001
+        return None
+    for line in (r.stdout or "").splitlines():
+        if line.startswith("PLUME_WIFI "):
+            return line.rsplit("\t", 1)[-1].strip() == "on"
+    return None
+
+
 def sign_and_install(ipa: Path, udid: str, on_line) -> None:
     PlumeRunner(on_line).run(["sign", "--apple-id", "-p", str(ipa), "--register-and-install", "--udid", udid])
 

@@ -20,3 +20,4 @@ py/.venv/
 py/build/
 py/dist/
 py/packaging/OneTap.iconset/
+py/packaging/drivers/

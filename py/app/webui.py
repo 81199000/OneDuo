@@ -300,7 +300,12 @@ class Api:
             core.sign_and_install(ipa, udid, on_line)
             self.push("step", {"step": "install", "state": "ok"})
             log.info("installed %s %s to %s", a.id, a.latest_version, udid)
-            dev_name = next((d.name for d in core.list_devices() if d.udid == udid), "iPhone")
+            dev = next((d for d in core.list_devices() if d.udid == udid), None)
+            dev_name = dev.name if dev else "iPhone"
+            # 数据线连着时顺手打开手机的「通过 Wi‑Fi 连接」，以后拔了线也能在同一 Wi‑Fi 下自动续签
+            if dev and dev.model == "USB" and core.wifi_sync(udid) is False:
+                ok = core.wifi_sync(udid, True)
+                log.info("wifi sync enabled for %s: %s", dev_name, ok)
             autopilot.record(udid, dev_name, a)
             self.push_installs()
             self.push("done")

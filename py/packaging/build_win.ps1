@@ -32,6 +32,15 @@ if (-not (Test-Path $drv)) {
   Copy-Item "$env:TEMP\itx\AppleMobileDeviceSupport64.msi" $drv
 }
 
+# 3b. Bonjour（Wi‑Fi 发现手机用）：苹果官方 Bonjour Print Services 包里的 Bonjour64.msi
+$bj = 'packaging\drivers\Bonjour64.msi'
+if (-not (Test-Path $bj)) {
+  $bs = "$env:TEMP\BonjourPSSetup.exe"
+  Invoke-WebRequest 'https://download.info.apple.com/Mac_OS_X/061-8098.20100603.gthyu/BonjourPSSetup.exe' -OutFile $bs -UseBasicParsing
+  if ((Get-AuthenticodeSignature $bs).SignerCertificate.Subject -notmatch 'Apple Inc') { throw 'Bonjour 安装包签名不是苹果' }
+  throw "请把 BonjourPSSetup.exe 里的 Bonjour64.msi 解出来放到 $bj（Mac 上：bsdtar -xf BonjourPSSetup.exe）"
+}
+
 # 4. PyInstaller（spec 里 Windows 分支 → dist\一键装\）
 Remove-Item -Recurse -Force build, 'dist\一键装' -ErrorAction SilentlyContinue
 & .\.venv\Scripts\python.exe -m PyInstaller packaging\OneTap.spec --noconfirm --log-level WARN
