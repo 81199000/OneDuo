@@ -25,7 +25,10 @@ from typing import Callable, Optional
 VERSION = "0.1.0"
 
 # 目录文件的几个镜像：GitHub raw、jsDelivr（国内较快）、Gitee raw
+CATALOG_REPO = "81199000/OneTapInstall"
 CATALOG_URLS = [
+    # API：私有仓库带 token 也能读（开发期）；公开后匿名也可
+    f"https://api.github.com/repos/{CATALOG_REPO}/contents/catalog/apps.json",
     "https://raw.githubusercontent.com/81199000/OneTapInstall/main/catalog/apps.json",
     "https://cdn.jsdelivr.net/gh/81199000/OneTapInstall@main/catalog/apps.json",
     "https://gitee.com/remon8/onetapinstall/raw/main/catalog/apps.json",
@@ -132,15 +135,27 @@ def load_catalog() -> Catalog:
         return _parse_catalog(p.read_bytes(), p.parent.as_uri() + "/", "本地")
 
     def fetch(url):
+        if "api.github.com" in url:
+            return url, http_get(url, timeout=8, accept="application/vnd.github.raw")
         return url, http_get(url, timeout=8)
 
     errors = []
-    with ThreadPoolExecutor(len(CATALOG_URLS)) as ex:
-        futs = [ex.submit(fetch, u) for u in CATALOG_URLS]
+    # 先试 GitHub API（实时，没 CDN 缓存）；失败再几个镜像一起拉，谁先回来用谁
+    try:
+        url, raw = fetch(CATALOG_URLS[0])
+        cat = _parse_catalog(raw, f"https://raw.githubusercontent.com/{CATALOG_REPO}/main/catalog/", "GitHub")
+        (data_dir() / "apps.json").write_bytes(raw)
+        return cat
+    except Exception as e:  # noqa: BLE001
+        errors.append(str(e))
+    with ThreadPoolExecutor(len(CATALOG_URLS) - 1) as ex:
+        futs = [ex.submit(fetch, u) for u in CATALOG_URLS[1:]]
         for f in as_completed(futs):
             try:
                 url, raw = f.result()
-                cat = _parse_catalog(raw, url.rsplit("/", 1)[0] + "/", url.split("/")[2])
+                base = (f"https://raw.githubusercontent.com/{CATALOG_REPO}/main/catalog/"
+                        if "api.github.com" in url else url.rsplit("/", 1)[0] + "/")
+                cat = _parse_catalog(raw, base, url.split("/")[2])
                 (data_dir() / "apps.json").write_bytes(raw)
                 return cat
             except Exception as e:  # noqa: BLE001
