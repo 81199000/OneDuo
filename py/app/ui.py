@@ -1,4 +1,4 @@
-"""一键装 · 界面（tkinter，Python 自带，Mac / Windows 通用）
+"""一键签 · 界面（tkinter，Python 自带，Mac / Windows 通用）
 
 首页：从 GitHub 列表读出的 App 卡片（DouDuo、GuoDuo……以后新 App 改列表就自动出现）
 安装：选 App → 连手机（屏幕上一步步教）→ Apple ID 登录（验证码弹窗）→ 下载 → 签名安装 → 告诉用户手机上信任
@@ -37,7 +37,7 @@ def F(size, weight="normal"):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"一键装 {core.VERSION}")
+        self.title(f"一键签 {core.VERSION}")
         self.geometry("820x600+120+120")
         self.minsize(760, 540)
         self.configure(bg=BG)
@@ -87,7 +87,7 @@ class App(tk.Tk):
     def _build(self):
         top = tk.Frame(self, bg=BG)
         top.pack(fill="x", padx=24, pady=(20, 8))
-        tk.Label(top, text="一键装", font=F(22, "bold"), fg=TEXT, bg=BG).pack(side="left")
+        tk.Label(top, text="一键签", font=F(22, "bold"), fg=TEXT, bg=BG).pack(side="left")
         tk.Label(top, text="  用自己的 Apple ID 免费签名，直接装到 iPhone / iPad", font=F(12), fg=SUB, bg=BG).pack(
             side="left", pady=(8, 0))
         self.update_btn = tk.Label(top, text="", font=F(11), fg=ACCENT, bg=BG, cursor="hand2")
@@ -369,7 +369,7 @@ class App(tk.Tk):
         url = cat.installer_download.get("gitee" if core.is_cn() else "github") or cat.installer_download.get("github")
 
         def go(_e=None):
-            if messagebox.askyesno("更新一键装", f"新版本 v{cat.installer_latest}\n\n{cat.installer_notes}\n\n打开下载页？"):
+            if messagebox.askyesno("更新一键签", f"新版本 v{cat.installer_latest}\n\n{cat.installer_notes}\n\n打开下载页？"):
                 webbrowser.open(url)
         self.update_btn.bind("<Button-1>", go)
 

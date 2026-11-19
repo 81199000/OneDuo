@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>一键装</title>
+<title>一键签</title>
 <style>
   :root {
     --bg: #111214; --card: #1c1d21; --card-hi: #26272c; --line: #2c2d33;
@@ -117,7 +117,7 @@
 <body>
 <div class="app">
   <header>
-    <h1>一键装</h1>
+    <h1>一键签</h1>
     <div class="tabs"><span id="tab-apps" class="on" onclick="showTab('apps')">装 App</span><span id="tab-mine" onclick="showTab('mine')">我的手机<span class="badge" id="minebadge" style="display:none"></span></span></div>
     <p id="slogan" style="margin-left:6px">用自己的 Apple ID 免费签名，直接装到 iPhone / iPad</p>
     <span class="upd" id="upd"></span>
@@ -254,7 +254,7 @@ function renderMine() {
       💡 想用 Wi‑Fi 自动续签：先用数据线连一次，在 Mac 的「访达」或 Windows 的「Apple 设备」里勾选「通过 Wi‑Fi 显示此 iPhone」。之后手机和电脑在同一个 Wi‑Fi 下，就不用插线了。<br>
       </div>
     <div class="pilotbar" style="margin-top:12px">
-      <div class="t"><h3>开机自动启动</h3><p>电脑开机后「一键装」自动在后台最小化运行，不用每次手动打开，续签和更新不会漏。</p></div>
+      <div class="t"><h3>开机自动启动</h3><p>电脑开机后「一键签」自动在后台最小化运行，不用每次手动打开，续签和更新不会漏。</p></div>
       <span class="sw ${S.autostart ? "on" : ""}" onclick="api().set_autostart(${!S.autostart}).then(v => { S.autostart = v; renderMine(); })"></span>
     </div>`;
 }

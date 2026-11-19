@@ -1,6 +1,6 @@
-﻿# 一键装 Windows 打包（在 Windows 上跑）
+﻿# 一键签 Windows 打包（在 Windows 上跑）
 #   powershell -ExecutionPolicy Bypass -File packaging\build_win.ps1
-# 产出：py\dist\OneTapInstall-<版本>-windows-x64-setup.exe
+# 产出：py\dist\OneDuo-<版本>-windows-x64-setup.exe
 # 需要：Python 3.12（F:\Python312 或 PATH 里）、Inno Setup 6（C:\onetap\inno 或默认路径）、
 #       ..\target\release\plumesign.exe（Mac 上交叉编译：cargo build --release -p plumesign --target x86_64-pc-windows-gnu）
 $ErrorActionPreference = 'Stop'
@@ -8,7 +8,7 @@ $ProgressPreference = 'SilentlyContinue'
 Set-Location (Join-Path $PSScriptRoot '..')       # py\
 
 $ver = (Select-String -Path app\core.py -Pattern '^VERSION = "([^"]+)"').Matches[0].Groups[1].Value
-Write-Host "== 一键装 $ver"
+Write-Host "== 一键签 $ver"
 
 # 1. Python 环境
 $py = @('F:\Python312\python.exe', (Get-Command python -ErrorAction SilentlyContinue).Source) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
@@ -41,15 +41,15 @@ if (-not (Test-Path $bj)) {
   throw "请把 BonjourPSSetup.exe 里的 Bonjour64.msi 解出来放到 $bj（Mac 上：bsdtar -xf BonjourPSSetup.exe）"
 }
 
-# 4. PyInstaller（spec 里 Windows 分支 → dist\一键装\）
-Remove-Item -Recurse -Force build, 'dist\一键装' -ErrorAction SilentlyContinue
+# 4. PyInstaller（spec 里 Windows 分支 → dist\一键签\）
+Remove-Item -Recurse -Force build, 'dist\一键签' -ErrorAction SilentlyContinue
 & .\.venv\Scripts\python.exe -m PyInstaller packaging\OneTap.spec --noconfirm --log-level WARN
-if (-not (Test-Path 'dist\一键装\一键装.exe')) { throw 'PyInstaller 没产出 一键装.exe' }
+if (-not (Test-Path 'dist\一键签\一键签.exe')) { throw 'PyInstaller 没产出 一键签.exe' }
 
 # 5. Inno Setup
 $iscc = @('C:\onetap\inno\ISCC.exe', "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw '没找到 Inno Setup 6（ISCC.exe）' }
 & $iscc /Q "/DAppVersion=$ver" packaging\OneTap.iss
 if ($LASTEXITCODE -ne 0) { throw "ISCC 失败 $LASTEXITCODE" }
-$out = Get-Item "dist\OneTapInstall-$ver-windows-x64-setup.exe"
+$out = Get-Item "dist\OneDuo-$ver-windows-x64-setup.exe"
 Write-Host ("✅ {0}  {1:N1} MB" -f $out.FullName, ($out.Length / 1MB))

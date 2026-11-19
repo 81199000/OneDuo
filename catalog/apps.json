@@ -1,12 +1,12 @@
 {
   "schema": 1,
   "installer": {
-    "name": "一键装",
+    "name": "一键签",
     "latest": "0.1.0",
     "notes": "首个版本：一键签名安装 DouDuo / GuoDuo",
     "download": {
-      "github": "https://github.com/81199000/OneTapInstall/releases/latest",
-      "gitee": "https://gitee.com/remon8/onetapinstall/releases"
+      "github": "https://github.com/81199000/OneDuo/releases/latest",
+      "gitee": "https://gitee.com/remon8/oneduo/releases"
     }
   },
   "apps": [

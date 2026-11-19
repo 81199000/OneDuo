@@ -1,4 +1,4 @@
-"""一键装 · 界面（pywebview：系统原生窗口里跑 HTML，Mac 用 WKWebView、Windows 用 Edge WebView2）
+"""一键签 · 界面（pywebview：系统原生窗口里跑 HTML，Mac 用 WKWebView、Windows 用 Edge WebView2）
 
 为什么不用 tkinter：Tk 在 Retina 屏把图片按 1x 画再放大，图标锯齿。网页渲染是原生分辨率。
 界面在 web/index.html，Python 这边只暴露 Api 给 JS 调；后台线程用 window.evaluate_js 推状态。
@@ -377,7 +377,7 @@ class Api:
             self.push("pilot", {"state": "run", "text": f"{'更新' if info['why'] == 'update' else '续签'} {info['name']} → {info['device']}…"})
         elif ev == "renew_done":
             self.push("pilot", {"state": "ok", "text": f"已{'更新' if info['why'] == 'update' else '续签'} {info['name']}（{info['device']}），又能用 7 天"})
-            core.notify("一键装", f"{info['name']} 已自动{'更新到 v' + info['version'] if info['why'] == 'update' else '续签'}（{info['device']}）")
+            core.notify("一键签", f"{info['name']} 已自动{'更新到 v' + info['version'] if info['why'] == 'update' else '续签'}（{info['device']}）")
         elif ev == "renew_fail":
             self.push("pilot", {"state": "err", "text": f"{info['name']} 自动续签没成功：{info['error']}"})
         self.push_installs()
@@ -391,10 +391,11 @@ def main():
     if not html.exists():
         html = Path(__file__).resolve().parent / "web" / "index.html"
     background = "--background" in sys.argv   # 开机自启：最小化挂着，只做自动续签
-    win = webview.create_window(f"一键装 {core.VERSION}", url=str(html), js_api=api,
+    win = webview.create_window(f"一键签 {core.VERSION}", url=str(html), js_api=api,
                                 width=900, height=640, min_size=(780, 560), background_color="#111214",
                                 minimized=background)
     api._window = win
+    core._migrate_old_name()
     api._pilot.enabled = core.get_pref("autopilot", True)
     api._pilot.start()
 

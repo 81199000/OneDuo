@@ -1,4 +1,4 @@
-"""一键装 · 核心逻辑（与界面无关，可单独测试）
+"""一键签 · 核心逻辑（与界面无关，可单独测试）
 
 - 应用目录：从 GitHub / Gitee 拉 catalog/apps.json（谁先回来用谁），新 App 只要改这个文件
 - 下载：每个 App 读自己仓库 Releases 的最新 IPA
@@ -26,16 +26,16 @@ from typing import Callable, Optional
 VERSION = "0.1.0"
 
 # 目录文件的几个镜像：GitHub raw、jsDelivr（国内较快）、Gitee raw
-CATALOG_REPO = "81199000/OneTapInstall"
+CATALOG_REPO = "81199000/OneDuo"
 CATALOG_URLS = [
     # API：私有仓库带 token 也能读（开发期）；公开后匿名也可
     f"https://api.github.com/repos/{CATALOG_REPO}/contents/catalog/apps.json",
-    "https://raw.githubusercontent.com/81199000/OneTapInstall/main/catalog/apps.json",
-    "https://cdn.jsdelivr.net/gh/81199000/OneTapInstall@main/catalog/apps.json",
-    "https://gitee.com/remon8/onetapinstall/raw/main/catalog/apps.json",
+    "https://raw.githubusercontent.com/81199000/OneDuo/main/catalog/apps.json",
+    "https://cdn.jsdelivr.net/gh/81199000/OneDuo@main/catalog/apps.json",
+    "https://gitee.com/remon8/oneduo/raw/main/catalog/apps.json",
 ]
 
-UA = f"OneTapInstall/{VERSION}"
+UA = f"OneDuo/{VERSION}"
 
 
 def data_dir() -> Path:
@@ -442,7 +442,7 @@ def notify(title: str, body: str) -> None:
                   "$x=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(1);"
                   f"$t=$x.GetElementsByTagName('text');$t.Item(0).AppendChild($x.CreateTextNode('{title}'))>$null;"
                   f"$t.Item(1).AppendChild($x.CreateTextNode('{body}'))>$null;"
-                  "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('一键装').Show([Windows.UI.Notifications.ToastNotification]::new($x))")
+                  "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('一键签').Show([Windows.UI.Notifications.ToastNotification]::new($x))")
             subprocess.run(["powershell", "-NoProfile", "-Command", ps], timeout=10, capture_output=True,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception:  # noqa: BLE001
@@ -462,7 +462,23 @@ def _app_launch_cmd() -> list[str]:
 
 
 def _win_startup_lnk() -> Path:
-    return Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "一键装.lnk"
+    return Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "一键签.lnk"
+
+
+def _migrate_old_name() -> None:
+    """改名前叫「一键装」：开机自启的旧项换成新名字（Mac 的 LaunchAgent 记的是 .app 路径，也要指到新 App）"""
+    try:
+        if sys.platform == "win32":
+            old = _win_startup_lnk().with_name("一键装.lnk")
+            if old.exists():
+                old.unlink()
+                set_autostart(True)
+        elif sys.platform == "darwin" and getattr(sys, "frozen", False):
+            f = Path.home() / "Library/LaunchAgents" / f"{_AGENT_LABEL}.plist"
+            if f.exists() and "一键装.app" in f.read_text("utf-8", errors="ignore"):
+                set_autostart(True)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def autostart_enabled() -> bool:
@@ -484,7 +500,7 @@ def set_autostart(on: bool) -> None:
         else:
             f.unlink(missing_ok=True)
     elif sys.platform == "win32":
-        # 跟安装包里「开机自动启动」是同一个快捷方式（启动文件夹\一键装.lnk），开关互通
+        # 跟安装包里「开机自动启动」是同一个快捷方式（启动文件夹\一键签.lnk），开关互通
         lnk = _win_startup_lnk()
         if on:
             cmd = _app_launch_cmd()
