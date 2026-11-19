@@ -75,6 +75,10 @@ class Api:
     def accounts(self):
         return core.saved_accounts()
 
+    def logout(self):
+        core.logout()
+        return core.saved_accounts()
+
     def open_url(self, url):
         webbrowser.open(url)
 
@@ -128,6 +132,11 @@ class Api:
             self.push("step", {"step": "device", "state": "ok"})
             self.push("step", {"step": "account", "state": "run"})
             accts = core.saved_accounts()
+            if accts:
+                self.push("log", f"使用已保存的 Apple ID：{accts[0]}，检查登录是否有效…")
+                if not core.session_ok():
+                    self.push("log", "登录已过期，需要重新输入密码")
+                    accts = []
             if not accts:
                 creds = self._ask_login()
                 if not creds:
