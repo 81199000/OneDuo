@@ -4,7 +4,9 @@
 import sys
 from pathlib import Path
 
+import re as _re
 ROOT = Path(SPECPATH).parent          # py/
+VERSION = _re.search(r'^VERSION = "([^"]+)"', (ROOT / "app" / "core.py").read_text(encoding="utf-8"), _re.M).group(1)
 REPO = ROOT.parent                    # 仓库根
 exe_name = "plumesign.exe" if sys.platform == "win32" else "plumesign"
 plume = REPO / "target" / "release" / exe_name
@@ -39,8 +41,8 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleDisplayName": "一键签",
             "CFBundleName": "一键签",
-            "CFBundleShortVersionString": "0.1.0",
-            "CFBundleVersion": "1",
+            "CFBundleShortVersionString": VERSION,
+            "CFBundleVersion": VERSION,
             "LSMinimumSystemVersion": "11.0",
             "NSHighResolutionCapable": True,
             "LSApplicationCategoryType": "public.app-category.utilities",
