@@ -2,22 +2,22 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.1.1",
-    "notes": "新增：有新版本自动弹窗，点「立即更新」自动下载、安装并重新打开\n新增：验证码没收到可以「重新发送」或「改用短信」\n优化：Mac 版已通过苹果公证，双击即可打开",
+    "latest": "0.2.0",
+    "notes": "新增：软件源，和全能签一样添加源地址，源里的 App 一键安装，有新版自动更新（一键签官方源为默认源）\n新增：证书签名，可导入 .p12 证书 + 描述文件，不用 Apple ID，没有 7 天和 3 个 App 的限制，同样自动更新\n修复：应用列表有时刷不出安装包（不再依赖 GitHub 接口，国内走 Gitee）",
     "download": {
       "github": "https://github.com/81199000/OneDuo/releases/latest",
       "gitee": "https://gitee.com/remon8/oneduo/releases"
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.1.1-macos-arm64.zip",
-        "size": 17326996,
-        "sha256": "ef19be37e3f2d9c285571d105e012604237cbb1c557f0e87ad98cbfce4229a65"
+        "name": "OneDuo-0.2.0-macos-arm64.zip",
+        "size": 17403420,
+        "sha256": "577927e4ade4ac08a3627c84109efa340c447400f5d7d2fec8ce642d0e2ca08e"
       },
       "windows": {
-        "name": "OneDuo-0.1.1-windows-x64-setup.exe",
-        "size": 49679331,
-        "sha256": "afd1fa5f071ce94b08e3e0716c54a4ed941a15e7ac4f152f9a994beb6c6a6001"
+        "name": "OneDuo-0.2.0-windows-x64-setup.exe",
+        "size": 49746423,
+        "sha256": "134837127540d723ad7bc85440be2629269f739a6613891fde0f44aed71ea55b"
       }
     }
   },
