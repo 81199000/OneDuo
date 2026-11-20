@@ -15,7 +15,7 @@ VER=${1:?用法：./release.sh <版本号> "<更新说明>"}
 NOTES=${2:?要写更新说明（会显示在更新弹窗里）}
 TAG=v$VER
 ROOT=$(cd .. && pwd)
-REPO=81199000/OneDuo
+REPO=WuWeiDuo/OneDuo
 print() { builtin print -P "%F{cyan}== $1%f"; }
 die() { builtin print -P "%F{red}❌ $1%f"; exit 1; }
 
