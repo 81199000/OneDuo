@@ -32,7 +32,12 @@
       "repo": "81199000/DouDuo",
       "asset_pattern": "DouDuo-*-unsigned.ipa",
       "min_ios": "26.0",
-      "homepage": "https://github.com/81199000/DouDuo"
+      "homepage": "https://github.com/81199000/DouDuo",
+      "gitee_repo": "remon8/douduo",
+      "sources": [
+        "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json",
+        "https://raw.githubusercontent.com/81199000/DouDuo/main/docs/source/douduo-github.json"
+      ]
     },
     {
       "id": "guoduo",
@@ -44,7 +49,12 @@
       "repo": "81199000/GuoDuo",
       "asset_pattern": "GuoDuo-*-unsigned.ipa",
       "min_ios": "18.4",
-      "homepage": "https://github.com/81199000/GuoDuo"
+      "homepage": "https://github.com/81199000/GuoDuo",
+      "gitee_repo": "remon8/guoduo",
+      "sources": [
+        "https://gitee.com/remon8/guoduo/raw/main/docs/source/guoduo.json",
+        "https://raw.githubusercontent.com/81199000/GuoDuo/main/docs/source/guoduo-github.json"
+      ]
     }
   ]
 }

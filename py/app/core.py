@@ -1,7 +1,7 @@
 """一键签 · 核心逻辑（与界面无关，可单独测试）
 
 - 应用目录：从 GitHub / Gitee 拉 catalog/apps.json（谁先回来用谁），新 App 只要改这个文件
-- 下载：每个 App 读自己仓库 Releases 的最新 IPA
+- 版本 / 下载：每个 App 读自己的软件源 JSON（全能签同款格式，Gitee + GitHub 镜像），不走 GitHub API
 - 签名安装：调用随包附带的 plumesign（Impactor 的命令行，MIT），
   Apple ID 登录 / 证书 / 描述文件 / 注册设备 / 签名 / 装机全在它里面
 """
@@ -101,11 +101,14 @@ class AppEntry:
     asset_pattern: str
     min_ios: str = ""
     homepage: str = ""
+    gitee_repo: str = ""                      # Gitee 镜像仓库（拼国内下载地址）
+    sources: list = field(default_factory=list)   # 软件源 JSON 地址（全能签同款格式），版本从这里读
     # 运行时补
     latest_version: Optional[str] = None
     asset_url: Optional[str] = None
     asset_api_url: Optional[str] = None
     asset_size: int = 0
+    asset_urls: list = field(default_factory=list)   # 同一版本的几个下载镜像，按优先级
     installed_version: Optional[str] = None
     icon_bytes: Optional[bytes] = None
     # 用户自己加的本地 IPA（不走下载）
@@ -146,14 +149,7 @@ def load_catalog() -> Catalog:
         return url, http_get(url, timeout=8)
 
     errors = []
-    # 先试 GitHub API（实时，没 CDN 缓存）；失败再几个镜像一起拉，谁先回来用谁
-    try:
-        url, raw = fetch(CATALOG_URLS[0])
-        cat = _parse_catalog(raw, f"https://raw.githubusercontent.com/{CATALOG_REPO}/main/catalog/", "GitHub")
-        (data_dir() / "apps.json").write_bytes(raw)
-        return cat
-    except Exception as e:  # noqa: BLE001
-        errors.append(str(e))
+    # raw / Gitee / jsDelivr 一起拉，谁先回来用谁；GitHub API 有每小时 60 次限额，只在都失败时才用
     with ThreadPoolExecutor(len(CATALOG_URLS) - 1) as ex:
         futs = [ex.submit(fetch, u) for u in CATALOG_URLS[1:]]
         for f in as_completed(futs):
@@ -166,6 +162,13 @@ def load_catalog() -> Catalog:
                 return cat
             except Exception as e:  # noqa: BLE001
                 errors.append(str(e))
+    try:
+        url, raw = fetch(CATALOG_URLS[0])
+        cat = _parse_catalog(raw, f"https://raw.githubusercontent.com/{CATALOG_REPO}/main/catalog/", "GitHub")
+        (data_dir() / "apps.json").write_bytes(raw)
+        return cat
+    except Exception as e:  # noqa: BLE001
+        errors.append(str(e))
     cached = data_dir() / "apps.json"
     if cached.exists():
         return _parse_catalog(cached.read_bytes(), "", "上次缓存")
@@ -186,17 +189,128 @@ def load_icon(cat: Catalog, app: AppEntry) -> Optional[bytes]:
         return local.read_bytes() if local.exists() else None
 
 
+def _source_versions(raw: bytes, bundle_id: str) -> list[dict]:
+    """软件源 JSON（全能签 / ESign / AltStore 同款格式）里这个包名的所有版本"""
+    j = json.loads(raw.decode("utf-8"))
+    out = []
+    for a in j.get("apps", []):
+        if bundle_id and a.get("bundleIdentifier") not in (bundle_id, None):
+            continue
+        vers = a.get("versions") or [a]          # AltStore 新格式把版本放 versions[]
+        for v in vers:
+            url = v.get("downloadURL") or a.get("downloadURL")
+            ver = str(v.get("version") or a.get("version") or "")
+            if url and ver:
+                try:
+                    size = int(v.get("size") or a.get("size") or 0)
+                except (TypeError, ValueError):
+                    size = 0
+                out.append({"version": ver, "url": url, "size": size})
+    return out
+
+
+def _latest_cache() -> Path:
+    return data_dir() / "latest.json"
+
+
+def _save_latest(app: AppEntry) -> None:
+    try:
+        d = json.loads(_latest_cache().read_text("utf-8")) if _latest_cache().exists() else {}
+    except Exception:  # noqa: BLE001
+        d = {}
+    d[app.id] = {"version": app.latest_version, "urls": app.asset_urls, "size": app.asset_size, "at": time.time()}
+    _latest_cache().write_text(json.dumps(d, ensure_ascii=False), "utf-8")
+
+
+def _mirror_urls(app: AppEntry, ver: str, first: Optional[str]) -> list[str]:
+    """同一个版本的几个下载地址：源里给的 + 按命名规则拼的 Gitee / GitHub 发行版地址。国内 Gitee 优先"""
+    name = app.asset_pattern.replace("*", ver) if app.asset_pattern else ""
+    gh = f"https://github.com/{app.repo}/releases/download/v{ver}/{name}" if app.repo and name else ""
+    ge = f"https://gitee.com/{app.gitee_repo}/releases/download/v{ver}/{name}" if app.gitee_repo and name else ""
+    order = [ge, gh] if is_cn() else [gh, ge]
+    urls = []
+    for u in [first, *order]:
+        if u and u not in urls:
+            urls.append(u)
+    return urls
+
+
 def resolve_latest(app: AppEntry) -> None:
-    """读这个 App 仓库 Releases 的最新版本和 IPA 下载地址"""
-    j = json.loads(http_get(f"https://api.github.com/repos/{app.repo}/releases/latest", timeout=10,
-                            accept="application/vnd.github+json"))
-    app.latest_version = (j.get("tag_name") or "").lstrip("v") or None
-    for a in j.get("assets", []):
-        if fnmatch.fnmatch(a["name"], app.asset_pattern):
-            app.asset_url = a["browser_download_url"]
-            app.asset_api_url = a["url"]
-            app.asset_size = a.get("size", 0)
+    """查这个 App 的最新版本和下载地址。
+
+    以前直接调 GitHub API（匿名每小时 60 次，同一个出口 IP 的几台电脑一起刷就 403，列表就刷不出来）。
+    现在顺序：① 软件源 JSON（Gitee / GitHub raw，几个一起拉，不限次）
+             ② GitHub 发行版页面跳转（不走 API，读最新 tag）
+             ③ GitHub API（最后才用）
+             ④ 上次查到的结果（离线也能装缓存里的包）
+    """
+    errors = []
+    srcs = list(app.sources or [])
+    if srcs:
+        found: list[dict] = []
+        with ThreadPoolExecutor(len(srcs)) as ex:
+            futs = [ex.submit(http_get, u, 10) for u in srcs]
+            for f in as_completed(futs):
+                try:
+                    found += _source_versions(f.result(), app.bundle_id)
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"源：{e}")
+        if found:
+            best = max(found, key=lambda v: [int(x) for x in re.findall(r"\d+", v["version"])])
+            same = [v for v in found if v["version"] == best["version"]]
+            app.latest_version = best["version"]
+            app.asset_size = max(v["size"] for v in same)
+            urls = []
+            for v in sorted(same, key=lambda v: ("gitee.com" not in v["url"]) if is_cn() else ("gitee.com" in v["url"])):
+                for u in _mirror_urls(app, best["version"], v["url"]):
+                    if u not in urls:
+                        urls.append(u)
+            app.asset_urls = urls
+            app.asset_url = urls[0]
+            app.asset_api_url = None
+            _save_latest(app)
             return
+    if app.repo:
+        # ② releases/latest 会 302 到 /releases/tag/vX.Y.Z，不算 API 次数
+        try:
+            req = urllib.request.Request(f"https://github.com/{app.repo}/releases/latest", headers={"User-Agent": UA}, method="HEAD")
+            with urllib.request.urlopen(req, timeout=10) as r:
+                tag = r.geturl().rstrip("/").rsplit("/", 1)[-1]
+            ver = tag.lstrip("v")
+            if re.match(r"^\d+(\.\d+)*$", ver) and app.asset_pattern:
+                app.latest_version = ver
+                app.asset_urls = _mirror_urls(app, ver, None)
+                app.asset_url = app.asset_urls[0]
+                app.asset_api_url = None
+                _save_latest(app)
+                return
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"发行版页：{e}")
+        # ③ API
+        try:
+            j = json.loads(http_get(f"https://api.github.com/repos/{app.repo}/releases/latest", timeout=10,
+                                    accept="application/vnd.github+json"))
+            app.latest_version = (j.get("tag_name") or "").lstrip("v") or None
+            for a in j.get("assets", []):
+                if fnmatch.fnmatch(a["name"], app.asset_pattern):
+                    app.asset_url = a["browser_download_url"]
+                    app.asset_api_url = a["url"]
+                    app.asset_size = a.get("size", 0)
+                    app.asset_urls = _mirror_urls(app, app.latest_version or "", app.asset_url)
+                    _save_latest(app)
+                    return
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"API：{e}")
+    # ④ 上次的结果
+    try:
+        c = json.loads(_latest_cache().read_text("utf-8")).get(app.id)
+        if c and c.get("urls"):
+            app.latest_version, app.asset_urls, app.asset_size = c["version"], c["urls"], c.get("size", 0)
+            app.asset_url = app.asset_urls[0]
+            return
+    except Exception:  # noqa: BLE001
+        pass
+    raise RuntimeError("；".join(errors) or "查不到版本")
 
 
 def download_ipa(app: AppEntry, progress: Callable[[float], None], cancel: threading.Event) -> Path:
@@ -208,28 +322,39 @@ def download_ipa(app: AppEntry, progress: Callable[[float], None], cancel: threa
         progress(1.0)
         return out
     tok = _token()
+    reqs = []
     if tok and app.asset_api_url:
-        req = urllib.request.Request(app.asset_api_url, headers={
-            "User-Agent": UA, "Accept": "application/octet-stream", "Authorization": f"Bearer {tok}"})
-    else:
-        req = urllib.request.Request(app.asset_url, headers={"User-Agent": UA})
+        reqs.append(urllib.request.Request(app.asset_api_url, headers={
+            "User-Agent": UA, "Accept": "application/octet-stream", "Authorization": f"Bearer {tok}"}))
+    for u in (app.asset_urls or [app.asset_url]):
+        reqs.append(urllib.request.Request(u, headers={"User-Agent": UA}))
     tmp = out.with_suffix(".part")
-    with urllib.request.urlopen(req, timeout=30) as r, open(tmp, "wb") as f:
-        total = int(r.headers.get("Content-Length") or app.asset_size or 0)
-        got = 0
-        while True:
-            if cancel.is_set():
-                raise RuntimeError("已取消")
-            chunk = r.read(256 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
-            got += len(chunk)
-            if total:
-                progress(got / total)
-    tmp.replace(out)
-    progress(1.0)
-    return out
+    errors = []
+    for req in reqs:                     # 一个镜像不通就换下一个
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r, open(tmp, "wb") as f:
+                total = int(r.headers.get("Content-Length") or app.asset_size or 0)
+                got = 0
+                while True:
+                    if cancel.is_set():
+                        raise SignError("已取消")
+                    chunk = r.read(256 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    got += len(chunk)
+                    if total:
+                        progress(got / total)
+            if app.asset_size and got != app.asset_size:
+                raise RuntimeError(f"大小不对（{got} / {app.asset_size}）")
+            tmp.replace(out)
+            progress(1.0)
+            return out
+        except SignError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{req.full_url.split('/')[2]}：{e}")
+    raise RuntimeError("下载失败：" + "；".join(errors))
 
 
 # MARK: 手机
