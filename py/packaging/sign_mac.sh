@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Developer ID 签名 + 苹果公证 + 装订（staple），产出可以直接发给别人的 zip。
-#   ./packaging/sign_mac.sh dist/一键签.app            → dist/OneDuo-<版本>-macos-arm64.zip
+#   ./packaging/sign_mac.sh dist/一键签.app            → dist/OneDuo-<版本>-macos-universal.zip
 #
 # 需要（都不入库，按自己的账号配置环境变量）：
 #   ONEDUO_SIGN_ID    签名身份，如 "Developer ID Application: Your Name (TEAMID)"
@@ -12,7 +12,7 @@ APP=${1:?用法：sign_mac.sh <path/to/一键签.app>}
 cd "$(dirname "$0")/.."
 VER=$(grep -E '^VERSION = ' app/core.py | head -1 | sed -E 's/.*"(.*)".*/\1/')
 ENT=packaging/entitlements.plist
-OUT=dist/OneDuo-$VER-macos-arm64.zip
+OUT=dist/OneDuo-$VER-macos-universal.zip
 
 if [[ -z $ONEDUO_SIGN_ID ]]; then
   codesign --force --deep -s - "$APP"

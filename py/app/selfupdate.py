@@ -5,7 +5,7 @@
     "latest": "0.1.1", "notes": "…",
     "assets": {
       "windows": {"name": "OneDuo-0.1.1-windows-x64-setup.exe", "sha256": "…", "size": 123},
-      "macos":   {"name": "OneDuo-0.1.1-macos-arm64.zip",       "sha256": "…", "size": 123}
+      "macos":   {"name": "OneDuo-0.2.1-macos-universal.zip",   "sha256": "…", "size": 123}
     },
     "download": {"github": "https://github.com/81199000/OneDuo/releases/latest", "gitee": "…"}
   }

@@ -3,12 +3,26 @@
 #   ./build_mac.sh
 set -e
 cd "$(dirname "$0")"
-(cd .. && cargo build --release -p plumesign)
-[ -d .venv ] || { /opt/homebrew/bin/python3.13 -m venv .venv; }
-env -i HOME=$HOME PATH=/usr/bin:/bin .venv/bin/python -m pip install -q -r requirements.txt pyinstaller
+# 通用包（Apple 芯片 + Intel 都能跑）：plumesign 两个架构各编一份再 lipo 合并；
+# Python 用 python.org 的 universal2 版（Homebrew 的只有 arm64），所以单独一个 .venv-universal
+export MACOSX_DEPLOYMENT_TARGET=11.0
+(cd .. && cargo build --release -p plumesign && cargo build --release -p plumesign --target x86_64-apple-darwin)
+mkdir -p ../target/universal
+lipo -create ../target/release/plumesign ../target/x86_64-apple-darwin/release/plumesign -output ../target/universal/plumesign
+[[ "$(lipo -archs ../target/universal/plumesign)" == *x86_64*arm64* || "$(lipo -archs ../target/universal/plumesign)" == *arm64*x86_64* ]] || { echo "❌ plumesign 不是通用架构"; exit 1; }
+UPY=/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
+[ -x $UPY ] || { echo "❌ 缺 python.org 的 Python 3.13（universal2），去 python.org 下载 macOS 安装包"; exit 1; }
+[ -d .venv-universal ] || $UPY -m venv .venv-universal
+env -i HOME=$HOME PATH=/usr/bin:/bin .venv-universal/bin/python -m pip install -q -r requirements.txt pyinstaller
 [ -f packaging/OneTap.icns ] || { env -i HOME=$HOME PATH=/usr/bin:/bin /usr/local/bin/python3 packaging/make_icon.py; iconutil -c icns packaging/OneTap.iconset -o packaging/OneTap.icns; }
 rm -rf build dist
-env -i HOME=$HOME PATH=/usr/bin:/bin LANG=zh_CN.UTF-8 .venv/bin/python -m PyInstaller packaging/OneTap.spec --noconfirm
+env -i HOME=$HOME PATH=/usr/bin:/bin LANG=zh_CN.UTF-8 ONETAP_TARGET_ARCH=universal2 .venv-universal/bin/python -m PyInstaller packaging/OneTap.spec --noconfirm
+# 包里每个可执行文件 / 库都要两个架构都有，少一个 Intel 机器上就会闪退
+bad=$(find dist/一键签.app/Contents -type f -perm +111 -o -type f -name "*.so" -o -type f -name "*.dylib" | while read -r f; do
+  file -b "$f" | grep -q "Mach-O" || continue
+  a=$(lipo -archs "$f" 2>/dev/null); [[ $a == *x86_64* && $a == *arm64* ]] || echo "$f ($a)"; done)
+[ -z "$bad" ] || { echo "❌ 这些文件不是通用架构：\n$bad"; exit 1; }
+echo "✅ 通用包：所有二进制都含 arm64 + x86_64"
 pkill -f "一键签.app/Contents/MacOS/OneTap" || true
 # 改名前叫「一键装」：旧的删掉，免得应用程序里有两个
 pkill -f "一键装.app/Contents/MacOS/OneTap" || true

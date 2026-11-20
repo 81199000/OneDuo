@@ -18,7 +18,7 @@ REPO=81199000/OneDuo
 print() { builtin print -P "%F{cyan}== $1%f"; }
 die() { builtin print -P "%F{red}❌ $1%f"; exit 1; }
 
-MAC=dist/OneDuo-$VER-macos-arm64.zip
+MAC=dist/OneDuo-$VER-macos-universal.zip
 WIN=dist/OneDuo-$VER-windows-x64-setup.exe
 [[ -z $(git -C "$ROOT" status --porcelain -uno) ]] || die "工作树有未提交的改动"
 
@@ -32,7 +32,7 @@ git -C "$ROOT" add py/app/core.py py/packaging/OneTap.iss
 git -C "$ROOT" commit -qm "release: 一键签 $VER" || true
 
 print "2/6 Mac 打包 + 签名 + 公证"
-if [[ -n $ONEDUO_SKIP_MAC && -f dist/OneDuo-$VER-macos-arm64.zip ]]; then echo "（沿用已公证的 dist/OneDuo-$VER-macos-arm64.zip）"; else ./build_mac.sh; fi
+if [[ -n $ONEDUO_SKIP_MAC && -f $MAC ]]; then echo "（沿用已公证的 $MAC）"; else ./build_mac.sh; fi
 [[ -f $MAC ]] || die "没有 $MAC"
 spctl --assess --type execute "dist/一键签.app" || die "Mac 包没通过系统检查（签名 / 公证）"
 
