@@ -5,7 +5,9 @@
     "latest": "0.2.2",
     "notes": "新增：查看软件源新版本更新了什么——App 详情里显示最新版的更新摘要，点开看完整说明；「我的手机」里有新版时可以点「看更新内容」\n新增：一键签官网 oneduo.app 上线\n优化：Gitee 不通时自动换用 Cloudflare R2（dl.oneduo.app）下载应用列表、软件源和安装包",
     "download": {
-      "gitee": "https://gitee.com/remon8/oneduo/releases"
+      "gitee": "https://oneduo.app/#download",
+      "github": "https://oneduo.app/#download",
+      "site": "https://oneduo.app/#download"
     },
     "assets": {
       "macos": {
@@ -31,11 +33,11 @@
       "repo": "",
       "asset_pattern": "DouDuo-*-unsigned.ipa",
       "min_ios": "26.0",
-      "homepage": "https://gitee.com/remon8/douduo",
+      "homepage": "https://github.com/WuWeiDuo/DouDuo",
       "gitee_repo": "remon8/douduo",
       "sources": [
-        "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json",
-        "https://dl.oneduo.app/douduo/douduo.json"
+        "https://dl.oneduo.app/douduo/douduo.json",
+        "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json"
       ]
     },
     {

@@ -5,9 +5,11 @@
 <p align="center">用自己的 Apple ID 免费签名，或导入证书签名，把 App 一键装到 iPhone / iPad。<br>支持添加软件源，到期前自动续签，有新版自动更新，同一个 Wi‑Fi 下不用插线。</p>
 
 <p align="center">
-  <a href="https://gitee.com/remon8/oneduo/releases"><b>下载 Windows 版</b></a> ·
-  <a href="https://gitee.com/remon8/oneduo/releases"><b>下载 Mac 版</b></a>
+  <a href="https://oneduo.app/#download"><b>官网下载（Windows / Mac）</b></a> ·
+  <a href="https://oneduo.app"><b>oneduo.app</b></a>
 </p>
+
+> ⭐ **点个 Star，再关注 [@WuWeiDuo](https://github.com/WuWeiDuo)，避免走失。** 原 GitHub 账号 81199000 已停用，项目搬到了这里：<https://github.com/WuWeiDuo/OneDuo>。官网 **[oneduo.app](https://oneduo.app)** 是长期固定入口，以后仓库再搬家也能从官网找到。
 
 ![一键签主界面](docs/tutorial/01-home.png)
 
@@ -17,7 +19,7 @@
 
 ### 1. 下载安装
 
-到 [发行版](https://gitee.com/remon8/oneduo/releases) 下载对应系统的安装包。
+到官网 **[oneduo.app](https://oneduo.app/#download)** 下载对应系统的安装包（下载慢可以用 [Gitee 备用下载](https://gitee.com/remon8/oneduo/releases)）。
 
 **Windows 10 / 11（64 位）**：
 
