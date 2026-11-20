@@ -114,7 +114,22 @@
   #smsBox { display: contents; }
   #updMask .dim { color: var(--dim); font-size: 13px; margin: 4px 0; }
   #updMask .err { color: var(--accent); font-size: 13px; margin: 4px 0; }
+  .whatsnew { margin: 10px 0 4px; border: 1px solid var(--line); border-radius: 10px; background: #141518; padding: 9px 12px;
+    display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; min-width: 0; }
+  .whatsnew:hover { border-color: #3a3b42; background: #17181c; }
+  .whatsnew .k { color: var(--dim); flex: none; } .whatsnew.hot .k { color: var(--accent); font-weight: 600; }
+  .whatsnew .v { color: var(--text); font-weight: 600; flex: none; }
+  .whatsnew .s { color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+  .whatsnew .more { color: var(--accent); flex: none; font-size: 12px; }
+  .updlink { color: var(--accent); cursor: pointer; border-bottom: 1px dashed currentColor; }
+  .notes { font-size: 13px; line-height: 1.65; color: var(--text); }
+  .notes p { margin: 0 0 8px; } .notes p.lead { font-weight: 600; color: var(--text); font-size: 14px; }
+  .notes h5 { margin: 10px 0 4px; font-size: 12px; font-weight: 600; color: var(--dim); letter-spacing: .04em; }
+  .notes ul { margin: 0 0 6px; padding-left: 1.1em; } .notes li { margin: 3px 0; padding-left: .2em; }
+  .notes li::marker { color: var(--accent); } .notes b { font-weight: 600; }
+  .updlink { color: var(--accent); cursor: pointer; border-bottom: 1px dashed currentColor; }
   .updnotes { white-space: pre-wrap; font-size: 13px; line-height: 1.6; max-height: 180px; overflow: auto; margin: 10px 0; color: var(--text); }
+  .updnotes.notes { white-space: normal; max-height: 60vh; margin-bottom: 0; }
   #updBar { display: block; height: 6px; border-radius: 3px; background: var(--line, #2a2c30); overflow: hidden; margin: 8px 0 4px; }
   #updBar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .search { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
@@ -323,7 +338,9 @@ function renderMine() {
   const m = S.pilotMsg;
   const rows = S.installs.map(i => {
     const [dt, dc] = fmtDays(i.days_left);
-    const upd = i.latest && i.version && i.latest !== i.version ? ` · <span style="color:var(--accent)">有新版 v${esc(i.latest)}</span>` : "";
+    const hasNotes = (allApps().find(x => x.id === i.app_id) || {}).notes;
+    const upd = i.latest && i.version && i.latest !== i.version
+      ? ` · <span style="color:var(--accent)">有新版 v${esc(i.latest)}</span>${hasNotes ? ` <span class="updlink" onclick="showNotes('${esc(i.app_id)}')">看更新内容</span>` : ""}` : "";
     return `<div class="inst">
       <div><h4>${esc(i.name)} <span class="m">v${esc(i.version)}${upd}</span>${i.sign_mode === "cert" ? '<span class="tag">证书</span>' : ""}</h4>
         <div class="m">${esc(i.device)} · ${new Date(i.expires_at * 1000).toLocaleString("zh-CN", {month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit"})} 到期${i.running ? " · <span style='color:#ff9f0a'>正在续签…</span>" : ""}</div></div>
@@ -427,6 +444,46 @@ function removeCustom(id) {
 
 function select(id) { if (S.busy) return; S.sel = id; renderList(); renderDetail(); }
 
+function notesHTML(t) {
+  // 软件源的更新说明是纯文本（偶尔带 markdown）。只认：## 标题、短行小标题、- 列表、**粗体**；其余按段落。
+  const inl = x => esc(x).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  const lines = String(t || "").replace(/\r/g, "").split("\n");
+  let out = "", list = false, first = true;
+  const close = () => { if (list) { out += "</ul>"; list = false; } };
+  lines.forEach((raw, i) => {
+    const ln = raw.trim();
+    if (!ln) { close(); return; }
+    const li = ln.match(/^[-*•·]\s+(.*)$/);
+    if (li) { if (!list) { out += "<ul>"; list = true; } out += `<li>${inl(li[1])}</li>`; first = false; return; }
+    close();
+    const h = ln.match(/^#{1,4}\s*(.+)$/);
+    const next = (lines.slice(i + 1).find(x => x.trim()) || "").trim();
+    if (h || (ln.length <= 10 && !/[。.!！?？:：，,]$/.test(ln) && /^[-*•·]\s/.test(next)))
+      out += `<h5>${inl(h ? h[1] : ln)}</h5>`;
+    else out += first ? `<p class="lead">${inl(ln)}</p>` : `<p>${inl(ln)}</p>`;
+    first = false;
+  });
+  close(); return out;
+}
+function whatsNewHTML(a, hasUpd) {
+  // 详情页只放一行摘要（不撑高面板、不挤掉「一键安装」），点开看完整更新内容
+  if (!a || !a.notes || a.custom) return "";
+  const first = String(a.notes).split("\n").map(x => x.trim()).find(Boolean) || "";
+  const sum = first.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(new RegExp("^" + a.name + "\\s*v?" + (a.version || "").replace(/\./g, "\\.") + "\\s*[·:：-]?\\s*", "i"), "");
+  return `<div class="whatsnew ${hasUpd ? "hot" : ""}" onclick="showNotes('${esc(a.id)}')" title="查看更新内容">
+    <span class="k">${hasUpd ? "有新版" : "更新内容"}</span><span class="v">v${esc(a.version)}</span>
+    <span class="s">${esc(sum)}</span><span class="more">查看 ›</span></div>`;
+}
+function showNotes(appId) {
+  const a = allApps().find(x => x.id === appId); if (!a || !a.notes) return;
+  $("updTitle").textContent = `${a.name} 更新内容`;
+  $("updVer").textContent = `v${a.version}` + (a.date ? ` · ${a.date} 发布` : "");
+  $("updNotes").innerHTML = notesHTML(a.notes); $("updNotes").className = "updnotes notes";
+  $("updBar").style.display = "none"; $("updMsg").textContent = ""; $("updMsg").style.display = "none";
+  $("updGo").style.display = "none";
+  $("updLater").textContent = "知道了"; $("updLater").onclick = () => { $("updMask").classList.remove("show"); $("updGo").style.display = ""; $("updMsg").style.display = ""; };
+  $("updMask").classList.add("show");
+}
 function renderDetail() {
   const a = allApps().find(x => x.id === S.sel); if (!a) return;
   const size = a.size ? ` · ${(a.size/1048576).toFixed(1)} MB` : "";
@@ -437,6 +494,7 @@ function renderDetail() {
       <div><h2>${esc(a.name)}${a.custom ? '<span class="tag">本地 IPA</span>' : ""}</h2><div class="meta">${ver}${size}${minos}</div>
       ${a.homepage ? `<span class="link" onclick="api().open_url('${esc(a.homepage)}')">项目主页</span>` : ""}</div></div>
     <div class="desc" style="max-height:110px;overflow:auto;white-space:pre-line">${a.custom ? "包名 " + esc(a.bundle_id) + "\n免费 Apple ID 签名后包名会加上你的团队后缀，跟原版 App 并存。" : esc(a.description)}</div>
+    ${whatsNewHTML(a, S.installs.some(i => i.app_id === a.id && i.latest && i.version && i.latest !== i.version))}
     <div class="note" style="margin-bottom:4px">签名方式：${curCert() ? "证书 · " + esc(curCert().team_name || curCert().name) : "免费 Apple ID（7 天，最多 3 个 App）"} <span class="link" onclick="showTab('set')">更换</span></div>
     <ul class="steps">${steps().map(([k,t]) => `<li id="st-${k}"><span class="dot"></span><span>${t}</span><span class="note"></span></li>`).join("")}</ul>
     <div class="bar"><i></i></div>
@@ -504,9 +562,9 @@ function openUpdate(d) {
   const u = $("upd"); u.textContent = `有新版本 v${d.version}`; u.style.display = "block"; u.onclick = () => { openUpdate.manual = true; openUpdate(d); openUpdate.manual = false; };
   $("updTitle").textContent = "一键签有新版本";
   $("updVer").textContent = `v${d.current} → v${d.version}`;
-  $("updNotes").textContent = d.notes || "";
+  $("updNotes").textContent = d.notes || ""; $("updNotes").className = "updnotes";
   $("updBar").style.display = "none"; $("updMsg").textContent = ""; $("updMsg").className = "dim";
-  $("updGo").disabled = false; $("updLater").disabled = false;
+  $("updGo").disabled = false; $("updLater").disabled = false; $("updGo").style.display = ""; $("updMsg").style.display = "";
   $("updGo").textContent = d.auto ? "立即更新" : "去下载";
   $("updLater").textContent = "以后再说"; $("updLater").onclick = closeUpdate;
   // 每次打开一键签都弹；「以后再说」只在这次运行里不再弹（标题栏的提示点了还能打开）

@@ -81,6 +81,7 @@ class Api:
                 "bundle_id": a.bundle_id, "version": a.latest_version, "size": a.asset_size,
                 "has_asset": bool(a.asset_url) if a.latest_version or a.unsupported else None,
                 "unsupported": a.unsupported,
+                "notes": a.latest_notes, "date": a.latest_date,
                 "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""}
 
     def _fetch_icon(self, cat, a: core.AppEntry):
