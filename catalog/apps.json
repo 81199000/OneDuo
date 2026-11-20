@@ -2,21 +2,21 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.2.0",
-    "notes": "新增：软件源，和全能签一样添加源地址，源里的 App 一键安装，有新版自动更新（一键签官方源为默认源）\n新增：证书签名，可导入 .p12 证书 + 描述文件，不用 Apple ID，没有 7 天和 3 个 App 的限制，同样自动更新\n修复：应用列表有时刷不出安装包（不再依赖 GitHub 接口，国内走 Gitee）",
+    "latest": "0.2.1",
+    "notes": "新增：支持 Intel 芯片的 Mac（macOS 11 及以上），Mac 安装包改为通用版\n调整：应用和更新全部改从 Gitee 下载，官方源暂时只保留 DouDuo",
     "download": {
       "gitee": "https://gitee.com/remon8/oneduo/releases"
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.2.0-macos-arm64.zip",
-        "size": 17403420,
-        "sha256": "577927e4ade4ac08a3627c84109efa340c447400f5d7d2fec8ce642d0e2ca08e"
+        "name": "OneDuo-0.2.1-macos-universal.zip",
+        "size": 29764139,
+        "sha256": "ea6e8c4ffc9afc390ec33054f49f543ea84f00f09c362e30129b57a82d82bc89"
       },
       "windows": {
-        "name": "OneDuo-0.2.0-windows-x64-setup.exe",
-        "size": 49746423,
-        "sha256": "134837127540d723ad7bc85440be2629269f739a6613891fde0f44aed71ea55b"
+        "name": "OneDuo-0.2.1-windows-x64-setup.exe",
+        "size": 49742204,
+        "sha256": "e6d0cb57a19d4a9239d1fb26267f918bfe55c4030f791d744ad61cd6800cba0a"
       }
     }
   },
