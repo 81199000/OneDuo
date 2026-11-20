@@ -2,9 +2,11 @@
 # 一键签发版（维护者在 Mac 上跑）：
 #   ./release.sh 0.1.1 "这一版的更新说明（显示在更新弹窗里）"
 #
-# 依次：改版本号 → Mac 打包 + 签名公证 → Windows 打包（远程 Windows 机器）→ 建 GitHub Release 上传
-#       → Gitee 同步 → R2 备用镜像（dl.oneduo.app）→ 最后才改 catalog/apps.json 的 installer（版本 + 文件名 + sha256 + 大小）并推送。
-# 最后一步推上去，所有装了一键签的电脑下次刷新列表就会弹更新。所以前面任何一步失败都不会误弹。
+# 依次：改版本号 → Mac 打包 + 签名公证 → Windows 打包（远程 Windows 机器）→ GitHub Release（存档）
+#       → 【渠道①】Gitee 发行版 → 【渠道②】R2（dl.oneduo.app）→ 改 catalog/apps.json 并推到 Gitee + R2
+#       → 【渠道③】官网 oneduo.app → 三渠道核对（publish_check.py）。
+# 一键签读列表的顺序是 Gitee → R2；官网读 R2。三个渠道都必须到位，任何一个失败就停，不往下走。
+# 改列表是安装包都上齐之后才做，所以前面失败不会误弹更新。
 #
 # 需要：ONETAP_WIN=用户@Windows机器（打 Windows 包）；~/.config/oneduo/sign.env（Mac 签名公证，见 packaging/sign_mac.sh）；
 #       gh 已登录；Gitee 同步可选（ONEDUO_GITEE_TOKEN 或 ~/.config/oneduo/gitee_token）；
@@ -50,15 +52,16 @@ for f in "$MAC" "$WIN"; do
   for i in 1 2 3 4; do gh release upload "$TAG" -R $REPO "$f" --clobber && break; echo "上传重试 $i"; sleep 10; done
 done
 
-print "5/6 Gitee 同步"
-if git -C "$ROOT" remote get-url gitee >/dev/null 2>&1; then
+print "5/6 渠道① Gitee 发行版"
+git -C "$ROOT" remote get-url gitee >/dev/null 2>&1 || die "没有 gitee 远端（渠道①）"
+{
   git -C "$ROOT" push -q gitee main 2>&1 | grep -v 'GITEE\|trace' || true
   git -C "$ROOT" push -q -f gitee "$TAG" 2>&1 | grep -v 'GITEE\|trace' || true
-  python3 packaging/gitee_release.py "$TAG" "$NOTES" "$MAC" "$WIN" || echo "⚠️ Gitee 发行版同步失败（国内用户会走 GitHub 下载），可稍后重跑：python3 packaging/gitee_release.py $TAG \"$NOTES\" $MAC $WIN"
-fi
+  python3 packaging/gitee_release.py "$TAG" "$NOTES" "$MAC" "$WIN" || die "Gitee 发行版同步失败（渠道①）。可单独重跑：python3 packaging/gitee_release.py $TAG \"$NOTES\" $MAC $WIN"
+}
 
-print "5b/6 R2 备用镜像（dl.oneduo.app）"
-python3 packaging/r2_sync.py --installer "$TAG" "$MAC" "$WIN" || echo "⚠️ R2 上传失败（只影响 Gitee 挂掉时的备用下载），可稍后重跑：python3 packaging/r2_sync.py --installer $TAG $MAC $WIN"
+print "5b/6 渠道② R2（dl.oneduo.app）安装包"
+python3 packaging/r2_sync.py --installer "$TAG" "$MAC" "$WIN" || die "R2 上传安装包失败（渠道②）。修好后重跑：ONEDUO_SKIP_MAC=1 ./release.sh $VER \"…\""
 
 if [[ -n $ONEDUO_HOLD ]]; then
   # 先不推应用列表：生成一份测试用列表（ONETAP_CATALOG=dist/catalog-test.json 启动旧版即可实测更新）
@@ -94,6 +97,13 @@ PY
 git -C "$ROOT" add catalog/apps.json
 git -C "$ROOT" commit -qm "release: 应用列表 installer → $VER（触发自动更新）"
 git -C "$ROOT" push -q origin main
-git -C "$ROOT" remote get-url gitee >/dev/null 2>&1 && { git -C "$ROOT" push -q gitee main 2>&1 | grep -v 'GITEE\|trace' || true; }
-python3 packaging/r2_sync.py || echo "⚠️ R2 应用列表同步失败，可稍后重跑：python3 packaging/r2_sync.py"
-builtin print -P "%F{green}✅ 一键签 $VER 已发布%f  https://github.com/$REPO/releases/tag/$TAG"
+git -C "$ROOT" push -q gitee main 2>&1 | grep -v 'GITEE\|trace' || true
+[[ $(git -C "$ROOT" ls-remote gitee main | cut -f1) == $(git -C "$ROOT" rev-parse HEAD) ]] || die "应用列表没推上 Gitee（渠道①）"
+python3 packaging/r2_sync.py || die "应用列表同步 R2 失败（渠道②）。修好后重跑：python3 packaging/r2_sync.py && ./packaging/site_sync.sh"
+
+print "6b/6 渠道③ 官网 oneduo.app"
+./packaging/site_sync.sh || die "官网发布失败（渠道③）。修好后重跑：./packaging/site_sync.sh"
+
+print "核对三个渠道"
+python3 packaging/publish_check.py --wait 180 || die "三渠道没全部对上，看上面 ❌ 那一行"
+builtin print -P "%F{green}✅ 一键签 $VER 已发布到 Gitee、R2、官网%f  https://oneduo.app"
