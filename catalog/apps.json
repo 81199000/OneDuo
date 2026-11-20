@@ -37,6 +37,22 @@
         "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json",
         "https://dl.oneduo.app/douduo/douduo.json"
       ]
+    },
+    {
+      "id": "guoduo",
+      "name": "GuoDuo",
+      "subtitle": "原生 SwiftUI 的红果短剧客户端",
+      "description": "适配 iPhone Duo 折叠屏、iPad 与普通 iPhone。推荐随机刷剧、弹幕热评、半折叠操作台。",
+      "bundle_id": "me.rrmm.hongguo",
+      "icon": "icons/guoduo.png",
+      "repo": "",
+      "asset_pattern": "GuoDuo-*-unsigned.ipa",
+      "min_ios": "18.4",
+      "homepage": "https://oneduo.app/",
+      "gitee_repo": "",
+      "sources": [
+        "https://dl.oneduo.app/guoduo/guoduo.json"
+      ]
     }
   ]
 }
