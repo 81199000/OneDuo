@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 # 目录文件的几个镜像：GitHub raw、jsDelivr（国内较快）、Gitee raw
 CATALOG_REPO = "81199000/OneDuo"
