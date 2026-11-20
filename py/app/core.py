@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 # 应用目录：Gitee 为主，Cloudflare R2（dl.oneduo.app）兜底。2026-11-20 起不再使用 GitHub / jsDelivr
 GITEE_REPO = "remon8/oneduo"
