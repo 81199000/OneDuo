@@ -5,7 +5,6 @@
     "latest": "0.2.0",
     "notes": "新增：软件源，和全能签一样添加源地址，源里的 App 一键安装，有新版自动更新（一键签官方源为默认源）\n新增：证书签名，可导入 .p12 证书 + 描述文件，不用 Apple ID，没有 7 天和 3 个 App 的限制，同样自动更新\n修复：应用列表有时刷不出安装包（不再依赖 GitHub 接口，国内走 Gitee）",
     "download": {
-      "github": "https://github.com/81199000/OneDuo/releases/latest",
       "gitee": "https://gitee.com/remon8/oneduo/releases"
     },
     "assets": {
@@ -29,31 +28,13 @@
       "description": "适配 iPhone Duo 折叠屏、iPad 与普通 iPhone。推荐 / 关注 / 直播整页上下滑，四种界面，后台播放与锁屏控制。",
       "bundle_id": "me.rrmm.douduo",
       "icon": "icons/douduo.png",
-      "repo": "81199000/DouDuo",
+      "repo": "",
       "asset_pattern": "DouDuo-*-unsigned.ipa",
       "min_ios": "26.0",
-      "homepage": "https://github.com/81199000/DouDuo",
+      "homepage": "https://gitee.com/remon8/douduo",
       "gitee_repo": "remon8/douduo",
       "sources": [
-        "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json",
-        "https://raw.githubusercontent.com/81199000/DouDuo/main/docs/source/douduo-github.json"
-      ]
-    },
-    {
-      "id": "guoduo",
-      "name": "GuoDuo",
-      "subtitle": "原生 SwiftUI 的红果短剧客户端",
-      "description": "适配 iPhone Duo 折叠屏、iPad 与普通 iPhone。推荐随机刷剧、弹幕热评、半折叠操作台、离线下载。",
-      "bundle_id": "me.rrmm.hongguo",
-      "icon": "icons/guoduo.png",
-      "repo": "81199000/GuoDuo",
-      "asset_pattern": "GuoDuo-*-unsigned.ipa",
-      "min_ios": "18.4",
-      "homepage": "https://github.com/81199000/GuoDuo",
-      "gitee_repo": "remon8/guoduo",
-      "sources": [
-        "https://gitee.com/remon8/guoduo/raw/main/docs/source/guoduo.json",
-        "https://raw.githubusercontent.com/81199000/GuoDuo/main/docs/source/guoduo-github.json"
+        "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json"
       ]
     }
   ]

@@ -1,7 +1,7 @@
 """一键签 · 核心逻辑（与界面无关，可单独测试）
 
-- 应用目录：从 GitHub / Gitee 拉 catalog/apps.json（谁先回来用谁），新 App 只要改这个文件
-- 版本 / 下载：每个 App 读自己的软件源 JSON（全能签同款格式，Gitee + GitHub 镜像），不走 GitHub API
+- 应用目录：从 Gitee 拉 catalog/apps.json，新 App 只要改这个文件
+- 版本 / 下载：每个 App 读自己的软件源 JSON（全能签同款格式，Gitee），不访问 GitHub
 - 签名安装：调用随包附带的 plumesign（Impactor 的命令行，MIT），
   Apple ID 登录 / 证书 / 描述文件 / 注册设备 / 签名 / 装机全在它里面
 """
@@ -25,14 +25,10 @@ from typing import Callable, Optional
 
 VERSION = "0.2.1"
 
-# 目录文件的几个镜像：GitHub raw、jsDelivr（国内较快）、Gitee raw
-CATALOG_REPO = "81199000/OneDuo"
+# 应用目录只放在 Gitee（2026-11-20 起不再使用 GitHub / jsDelivr）
+GITEE_REPO = "remon8/oneduo"
 CATALOG_URLS = [
-    # API：私有仓库带 token 也能读（开发期）；公开后匿名也可
-    f"https://api.github.com/repos/{CATALOG_REPO}/contents/catalog/apps.json",
-    "https://raw.githubusercontent.com/81199000/OneDuo/main/catalog/apps.json",
-    "https://cdn.jsdelivr.net/gh/81199000/OneDuo@main/catalog/apps.json",
-    "https://gitee.com/remon8/oneduo/raw/main/catalog/apps.json",
+    f"https://gitee.com/{GITEE_REPO}/raw/main/catalog/apps.json",
 ]
 
 UA = f"OneDuo/{VERSION}"
@@ -150,31 +146,17 @@ def load_catalog() -> Catalog:
         return _parse_catalog(p.read_bytes(), p.parent.as_uri() + "/", "本地")
 
     def fetch(url):
-        if "api.github.com" in url:
-            return url, http_get(url, timeout=8, accept="application/vnd.github.raw")
-        return url, http_get(url, timeout=8)
+        return url, http_get(url, timeout=10)
 
     errors = []
-    # raw / Gitee / jsDelivr 一起拉，谁先回来用谁；GitHub API 有每小时 60 次限额，只在都失败时才用
-    with ThreadPoolExecutor(len(CATALOG_URLS) - 1) as ex:
-        futs = [ex.submit(fetch, u) for u in CATALOG_URLS[1:]]
-        for f in as_completed(futs):
-            try:
-                url, raw = f.result()
-                base = (f"https://raw.githubusercontent.com/{CATALOG_REPO}/main/catalog/"
-                        if "api.github.com" in url else url.rsplit("/", 1)[0] + "/")
-                cat = _parse_catalog(raw, base, url.split("/")[2])
-                (data_dir() / "apps.json").write_bytes(raw)
-                return cat
-            except Exception as e:  # noqa: BLE001
-                errors.append(str(e))
-    try:
-        url, raw = fetch(CATALOG_URLS[0])
-        cat = _parse_catalog(raw, f"https://raw.githubusercontent.com/{CATALOG_REPO}/main/catalog/", "GitHub")
-        (data_dir() / "apps.json").write_bytes(raw)
-        return cat
-    except Exception as e:  # noqa: BLE001
-        errors.append(str(e))
+    for u in CATALOG_URLS:
+        try:
+            url, raw = fetch(u)
+            cat = _parse_catalog(raw, url.rsplit("/", 1)[0] + "/", url.split("/")[2])
+            (data_dir() / "apps.json").write_bytes(raw)
+            return cat
+        except Exception as e:  # noqa: BLE001
+            errors.append(str(e))
     cached = data_dir() / "apps.json"
     if cached.exists():
         return _parse_catalog(cached.read_bytes(), "", "上次缓存")
@@ -309,11 +291,9 @@ def _save_latest(app: AppEntry) -> None:
 def _mirror_urls(app: AppEntry, ver: str, first: Optional[str]) -> list[str]:
     """同一个版本的几个下载地址：源里给的 + 按命名规则拼的 Gitee / GitHub 发行版地址。国内 Gitee 优先"""
     name = app.asset_pattern.replace("*", ver) if app.asset_pattern else ""
-    gh = f"https://github.com/{app.repo}/releases/download/v{ver}/{name}" if app.repo and name else ""
     ge = f"https://gitee.com/{app.gitee_repo}/releases/download/v{ver}/{name}" if app.gitee_repo and name else ""
-    order = [ge, gh] if is_cn() else [gh, ge]
     urls = []
-    for u in [first, *order]:
+    for u in [first, ge]:
         if u and u not in urls:
             urls.append(u)
     return urls
@@ -323,10 +303,8 @@ def resolve_latest(app: AppEntry) -> None:
     """查这个 App 的最新版本和下载地址。
 
     以前直接调 GitHub API（匿名每小时 60 次，同一个出口 IP 的几台电脑一起刷就 403，列表就刷不出来）。
-    现在顺序：① 软件源 JSON（Gitee / GitHub raw，几个一起拉，不限次）
-             ② GitHub 发行版页面跳转（不走 API，读最新 tag）
-             ③ GitHub API（最后才用）
-             ④ 上次查到的结果（离线也能装缓存里的包）
+    现在顺序：① 软件源 JSON（只用 Gitee）
+             ② 上次查到的结果（离线也能装缓存里的包）
     """
     errors = []
     srcs = list(app.sources or [])
@@ -344,38 +322,7 @@ def resolve_latest(app: AppEntry) -> None:
             return
         if app.unsupported:
             return
-    if app.repo:
-        # ② releases/latest 会 302 到 /releases/tag/vX.Y.Z，不算 API 次数
-        try:
-            req = urllib.request.Request(f"https://github.com/{app.repo}/releases/latest", headers={"User-Agent": UA}, method="HEAD")
-            with urllib.request.urlopen(req, timeout=10) as r:
-                tag = r.geturl().rstrip("/").rsplit("/", 1)[-1]
-            ver = tag.lstrip("v")
-            if re.match(r"^\d+(\.\d+)*$", ver) and app.asset_pattern:
-                app.latest_version = ver
-                app.asset_urls = _mirror_urls(app, ver, None)
-                app.asset_url = app.asset_urls[0]
-                app.asset_api_url = None
-                _save_latest(app)
-                return
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"发行版页：{e}")
-        # ③ API
-        try:
-            j = json.loads(http_get(f"https://api.github.com/repos/{app.repo}/releases/latest", timeout=10,
-                                    accept="application/vnd.github+json"))
-            app.latest_version = (j.get("tag_name") or "").lstrip("v") or None
-            for a in j.get("assets", []):
-                if fnmatch.fnmatch(a["name"], app.asset_pattern):
-                    app.asset_url = a["browser_download_url"]
-                    app.asset_api_url = a["url"]
-                    app.asset_size = a.get("size", 0)
-                    app.asset_urls = _mirror_urls(app, app.latest_version or "", app.asset_url)
-                    _save_latest(app)
-                    return
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"API：{e}")
-    # ④ 上次的结果
+    # ② 上次的结果（源暂时拉不到时，离线也能装缓存里的包）
     try:
         c = json.loads(_latest_cache().read_text("utf-8")).get(app.id)
         if c and c.get("urls"):

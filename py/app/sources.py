@@ -1,6 +1,6 @@
 """一键签 · 软件源（和全能签 / ESign / AltStore 同一种 JSON 格式）
 
-- 一键签官方源 = catalog/apps.json 里的 App（DouDuo / GuoDuo），固定在第一位，不能删
+- 一键签官方源 = catalog/apps.json 里的 App（目前只有 DouDuo），固定在第一位，不能删
 - 用户可以加别的软件源地址；源里的 App 显示在列表里，点一键安装就下载、签名、装上
 - 装过的 App 记着来自哪个源，后台定时刷新源，有新版本自动更新
 
