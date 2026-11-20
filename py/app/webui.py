@@ -164,8 +164,7 @@ class Api:
             self.push("refreshed", "发现新版本：" + "、".join(changed) if changed else "已是最新")
         if cat and core.newer(cat.installer_latest, core.VERSION) and not getattr(self, "_upd_pushed", False):
             self._upd_pushed = True
-            url = cat.installer_download.get("gitee" if core.is_cn() else "github") \
-                or cat.installer_download.get("github", "")
+            url = cat.installer_download.get("gitee", "")
             self._update = (cat.installer_latest, selfupdate.asset_for(cat))
             auto = selfupdate.can_self_update() and bool(self._update[1])
             self.push("self_update", {"version": cat.installer_latest, "current": core.VERSION,

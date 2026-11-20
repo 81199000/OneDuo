@@ -358,7 +358,7 @@ function renderSet() {
   if (S.tab !== "set") return;
   const src = (S.sources.length ? S.sources : [{ id: "official", name: "一键签官方源", official: true }]).map(x => `
     <div class="srow"><div class="t"><h4>${esc(x.name)} ${x.official ? '<span class="tag">默认 · 不能删除</span>' : ""}</h4>
-      <div class="m">${x.official ? "DouDuo、GuoDuo 等官方 App（Gitee + GitHub 镜像）" : esc(x.url)}</div>
+      <div class="m">${x.official ? "DouDuo 等官方 App（Gitee）" : esc(x.url)}</div>
       ${x.error ? `<div class="e">读取失败：${esc(x.error)}</div>` : ""}</div>
       <span class="m">${x.count ?? ""} 个 App</span>
       ${x.official ? "" : `<button class="smallbtn" onclick="if(confirm('删除这个软件源？已经装到手机上的 App 不受影响，但以后不会再自动更新。')) api().remove_source('${x.id}')">删除</button>`}

@@ -5,8 +5,8 @@
 <p align="center">用自己的 Apple ID 免费签名，或导入证书签名，把 App 一键装到 iPhone / iPad。<br>支持添加软件源，到期前自动续签，有新版自动更新，同一个 Wi‑Fi 下不用插线。</p>
 
 <p align="center">
-  <a href="https://github.com/81199000/OneDuo/releases/latest"><b>下载 Windows 版</b></a> ·
-  <a href="https://github.com/81199000/OneDuo/releases/latest"><b>下载 Mac 版</b></a>
+  <a href="https://gitee.com/remon8/oneduo/releases"><b>下载 Windows 版</b></a> ·
+  <a href="https://gitee.com/remon8/oneduo/releases"><b>下载 Mac 版</b></a>
 </p>
 
 ![一键签主界面](docs/tutorial/01-home.png)
@@ -17,7 +17,7 @@
 
 ### 1. 下载安装
 
-到 [Releases](https://github.com/81199000/OneDuo/releases/latest) 下载对应系统的安装包。
+到 [发行版](https://gitee.com/remon8/oneduo/releases) 下载对应系统的安装包。
 
 **Windows 10 / 11（64 位）**：
 
@@ -108,7 +108,7 @@
 ![添加软件源](docs/tutorial/10-add-source.png)
 
 - 支持全能签 / ESign / AltStore / SideStore 的软件源格式。
-- 「一键签官方源」（DouDuo、GuoDuo）是默认源，固定在第一位，不能删除。
+- 「一键签官方源」（DouDuo）是默认源，固定在第一位，不能删除。
 - 装过的 App 有新版本，会和官方 App 一样在后台自动更新。
 - 需要解锁码的 App、网盘链接的 App 会显示「不支持」，不能直接装。
 

@@ -33,6 +33,8 @@ FAKE = """
   A.devices = async () => window.__fakeDevices;
   A.accounts = async () => ['example@icloud.com'];
   A.install = () => {};
+  A.installs = async () => ({items: [], enabled: true});
+  A.autostart = async () => true;
   A.add_source = () => {};
   window.__sign = { mode: 'apple_id', certs: [] };
   A.sign_modes = async () => window.__sign;
@@ -72,7 +74,7 @@ async def main():
         await page.add_init_script(FAKE.strip().removeprefix("(") .removesuffix(")()") and f"window.addEventListener('DOMContentLoaded', () => ({FAKE.strip()}))")
         await page.goto(HTML.as_uri())
         await page.evaluate("window.dispatchEvent(new Event('pywebviewready'))")
-        await page.wait_for_function("document.querySelectorAll('.item').length >= 2", timeout=60000)
+        await page.wait_for_function("document.querySelectorAll('.item').length >= 1", timeout=60000)
         await page.wait_for_timeout(5000)
         J = page.evaluate
 
@@ -84,6 +86,32 @@ async def main():
         await J("S.custom = []; renderList(); 1")
         await page.wait_for_timeout(2500)          # 等 pollDevices 把示例手机显示出来
         await snap("01-home")
+
+        # ---- 原教程 02–08（只有 DouDuo）----
+        await J("select('douduo'); 1")
+        await snap("02-app-selected")
+        await J("window.onEvent('need_login'); $('user').value='example@icloud.com'; $('pw').value='********'; 1")
+        await snap("03-login")
+        await J("$('loginMask').classList.remove('show'); window.onEvent('need_2fa', {kind:'device', phones:[{id:1,tail:'88'}]}); 1")
+        await snap("04-2fa")
+        await J("""clearInterval(codeTimer); $('codeMask').classList.remove('show');
+            S.busy=true; renderDetail(); $('go').disabled=true; $('go').textContent='安装中…';
+            setStep('device','ok','我的 iPhone'); setStep('account','ok','example@icloud.com');
+            setStep('download','ok','v' + (allApps().find(a=>a.id==='douduo').version||''));
+            setStep('install','run'); msg('正在签名并安装到手机，请保持手机解锁、数据线不要拔…');
+            const b=document.querySelector('.bar'); b.style.display='block'; b.firstChild.style.width='62%'; 1""")
+        await snap("05-installing")
+        await J("setStep('install','ok'); finish(true); 1")
+        await snap("06-done")
+        ver = await J("allApps().find(a=>a.id==='douduo').version || '1.6.4'")
+        await J(f"""S.busy=false; S.installs=[
+            {{key:'a',name:'DouDuo',device:'我的 iPhone',version:'{ver}',days_left:6.2,expires_at:{NOW + 6.2 * 86400},auto:true,error:'',latest:'{ver}',running:false,app_id:'douduo',sign_mode:'apple_id'}},
+            {{key:'b',name:'DouDuo',device:'我的 iPad',version:'{ver}',days_left:1.4,expires_at:{NOW + 1.4 * 86400},auto:true,error:'',latest:'{ver}',running:false,app_id:'douduo',sign_mode:'apple_id'}}];
+            S.autostart=true; showTab('mine'); 1""")
+        await snap("07-my-phones")
+        await J("showTab('apps'); S.sel=null; renderList(); $('detail').innerHTML='<div class=\"empty\">← 选一个 App</div>'; $('drop').classList.add('show'); 1")
+        await snap("08-drop-ipa")
+        await J("$('drop').classList.remove('show'); 1")
 
         # 软件源与证书页（只有官方源）
         await J("showTab('set')")
@@ -106,7 +134,7 @@ async def main():
         await snap("12-cert-selected")
 
         # 用证书装 App 的详情页
-        await J("showTab('apps'); select('guoduo'); 1")
+        await J("showTab('apps'); select('douduo'); 1")
         await snap("13-install-with-cert")
         await browser.close()
 

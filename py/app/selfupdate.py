@@ -7,9 +7,9 @@
       "windows": {"name": "OneDuo-0.1.1-windows-x64-setup.exe", "sha256": "…", "size": 123},
       "macos":   {"name": "OneDuo-0.2.1-macos-universal.zip",   "sha256": "…", "size": 123}
     },
-    "download": {"github": "https://github.com/81199000/OneDuo/releases/latest", "gitee": "…"}
+    "download": {"gitee": "https://gitee.com/remon8/oneduo/releases"}
   }
-下载地址按 tag 拼：GitHub / Gitee 发行版 v<latest>/<name>，中国大陆优先 Gitee。
+下载地址按 tag 拼：Gitee 发行版 v<latest>/<name>。
 """
 from __future__ import annotations
 
@@ -28,7 +28,6 @@ from . import core
 
 log = logging.getLogger("selfupdate")
 
-GITHUB_DL = "https://github.com/{repo}/releases/download/v{ver}/{name}"
 GITEE_DL = "https://gitee.com/{repo}/releases/download/v{ver}/{name}"
 GITEE_REPO = "remon8/oneduo"
 
@@ -56,9 +55,7 @@ def _urls(ver: str, name: str) -> list[str]:
     base = os.environ.get("ONETAP_UPDATE_BASE")   # 只用于测试：从本地目录 / 内网地址拿安装包
     if base:
         return [base.rstrip("/") + "/" + name]
-    gh = GITHUB_DL.format(repo=core.CATALOG_REPO, ver=ver, name=name)
-    gt = GITEE_DL.format(repo=GITEE_REPO, ver=ver, name=name)
-    return [gt, gh] if core.is_cn() else [gh, gt]
+    return [GITEE_DL.format(repo=GITEE_REPO, ver=ver, name=name)]
 
 
 def download(ver: str, asset: dict, progress: Callable[[float], None]) -> Path:
