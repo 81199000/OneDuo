@@ -10,6 +10,11 @@ VERSION = _re.search(r'^VERSION = "([^"]+)"', (ROOT / "app" / "core.py").read_te
 REPO = ROOT.parent                    # 仓库根
 exe_name = "plumesign.exe" if sys.platform == "win32" else "plumesign"
 plume = REPO / "target" / "release" / exe_name
+# Mac 出通用包（Apple 芯片 + Intel）：build_mac.sh 用 lipo 合好放在 target/universal/
+import os as _os
+TARGET_ARCH = _os.environ.get("ONETAP_TARGET_ARCH") or None
+if sys.platform == "darwin" and TARGET_ARCH == "universal2":
+    plume = REPO / "target" / "universal" / exe_name
 
 datas = [
     (str(ROOT / "app" / "web"), "app/web"),
@@ -31,7 +36,7 @@ pyz = PYZ(a.pure)
 
 if sys.platform == "darwin":
     exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="OneTap", console=False,
-              argv_emulation=False, target_arch=None)
+              argv_emulation=False, target_arch=TARGET_ARCH)
     coll = COLLECT(exe, a.binaries, a.datas, name="OneTap")
     app = BUNDLE(
         coll,
