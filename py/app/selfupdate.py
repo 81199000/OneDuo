@@ -9,7 +9,7 @@
     },
     "download": {"gitee": "https://gitee.com/remon8/oneduo/releases"}
   }
-下载地址按 tag 拼：Gitee 发行版 v<latest>/<name>。
+下载地址按 tag 拼：Gitee 发行版 v<latest>/<name>，不通再走 R2 镜像 dl.oneduo.app/oneduo/v<latest>/<name>。
 """
 from __future__ import annotations
 
@@ -55,7 +55,8 @@ def _urls(ver: str, name: str) -> list[str]:
     base = os.environ.get("ONETAP_UPDATE_BASE")   # 只用于测试：从本地目录 / 内网地址拿安装包
     if base:
         return [base.rstrip("/") + "/" + name]
-    return [GITEE_DL.format(repo=GITEE_REPO, ver=ver, name=name)]
+    return [GITEE_DL.format(repo=GITEE_REPO, ver=ver, name=name),
+            f"{core.R2_BASE}/oneduo/v{ver}/{name}"]
 
 
 def download(ver: str, asset: dict, progress: Callable[[float], None]) -> Path:

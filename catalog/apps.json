@@ -34,7 +34,8 @@
       "homepage": "https://gitee.com/remon8/douduo",
       "gitee_repo": "remon8/douduo",
       "sources": [
-        "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json"
+        "https://gitee.com/remon8/douduo/raw/main/docs/source/douduo.json",
+        "https://dl.oneduo.app/douduo/douduo.json"
       ]
     }
   ]

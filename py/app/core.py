@@ -25,10 +25,12 @@ from typing import Callable, Optional
 
 VERSION = "0.2.1"
 
-# 应用目录只放在 Gitee（2026-11-20 起不再使用 GitHub / jsDelivr）
+# 应用目录：Gitee 为主，Cloudflare R2（dl.oneduo.app）兜底。2026-11-20 起不再使用 GitHub / jsDelivr
 GITEE_REPO = "remon8/oneduo"
+R2_BASE = "https://dl.oneduo.app"          # 镜像布局：<app id>/v<版本>/<文件名>、oneduo/catalog/apps.json、<app id>/<app id>.json
 CATALOG_URLS = [
     f"https://gitee.com/{GITEE_REPO}/raw/main/catalog/apps.json",
+    f"{R2_BASE}/oneduo/catalog/apps.json",
 ]
 
 UA = f"OneDuo/{VERSION}"
@@ -289,11 +291,12 @@ def _save_latest(app: AppEntry) -> None:
 
 
 def _mirror_urls(app: AppEntry, ver: str, first: Optional[str]) -> list[str]:
-    """同一个版本的几个下载地址：源里给的 + 按命名规则拼的 Gitee / GitHub 发行版地址。国内 Gitee 优先"""
+    """同一个版本的几个下载地址：源里给的 + 按命名规则拼的 Gitee 发行版 / R2 镜像地址。一个不通换下一个"""
     name = app.asset_pattern.replace("*", ver) if app.asset_pattern else ""
     ge = f"https://gitee.com/{app.gitee_repo}/releases/download/v{ver}/{name}" if app.gitee_repo and name else ""
+    r2 = f"{R2_BASE}/{app.id}/v{ver}/{name}" if app.source_id == "official" and name else ""
     urls = []
-    for u in [first, ge]:
+    for u in [first, ge, r2]:
         if u and u not in urls:
             urls.append(u)
     return urls
@@ -303,7 +306,7 @@ def resolve_latest(app: AppEntry) -> None:
     """查这个 App 的最新版本和下载地址。
 
     以前直接调 GitHub API（匿名每小时 60 次，同一个出口 IP 的几台电脑一起刷就 403，列表就刷不出来）。
-    现在顺序：① 软件源 JSON（只用 Gitee）
+    现在顺序：① 软件源 JSON（Gitee + R2 镜像，几个一起拉，版本合并）
              ② 上次查到的结果（离线也能装缓存里的包）
     """
     errors = []
