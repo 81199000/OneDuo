@@ -117,6 +117,28 @@
   .updnotes { white-space: pre-wrap; font-size: 13px; line-height: 1.6; max-height: 180px; overflow: auto; margin: 10px 0; color: var(--text); }
   #updBar { display: block; height: 6px; border-radius: 3px; background: var(--line, #2a2c30); overflow: hidden; margin: 8px 0 4px; }
   #updBar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .search { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; font: inherit; font-size: 13px; -webkit-user-select: text; user-select: text; flex: none; }
+  .srchead { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12px; margin: 8px 0 0; cursor: pointer; }
+  .srchead b { color: var(--sub); font-weight: 600; } .srchead .cnt { margin-left: auto; }
+  .item.dis { opacity: .55; }
+  .set { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 760px; }
+  .panel { background: var(--card); border-radius: 14px; padding: 16px 18px; }
+  .panel h3 { font-size: 15px; margin-bottom: 4px; } .panel > p { color: var(--sub); font-size: 12.5px; margin-bottom: 10px; }
+  .row2 { display: flex; gap: 8px; align-items: center; }
+  .row2 input { flex: 1; background: #111214; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+    font: inherit; font-size: 13.5px; -webkit-user-select: text; user-select: text; }
+  .srow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .srow:first-of-type { border-top: 0; }
+  .srow .t { flex: 1; min-width: 0; } .srow h4 { font-size: 14px; font-weight: 600; }
+  .srow .m { color: var(--dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srow .e { color: var(--accent); font-size: 12px; }
+  .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--dim); flex: none; cursor: pointer; position: relative; }
+  .radio.on { border-color: var(--accent); } .radio.on::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--accent); }
+  .filebtn { display: flex; align-items: center; gap: 10px; background: #111214; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+    color: var(--sub); cursor: pointer; font-size: 13.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .filebtn.set { color: var(--text); }
+  .dialog .err { color: var(--accent); font-size: 13px; margin-top: 10px; white-space: pre-line; }
   .dialog .row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
   .dialog button { border: 0; border-radius: 10px; padding: 9px 20px; font: inherit; font-weight: 600; cursor: pointer; }
   .dialog .ghost { background: transparent; color: var(--sub); }
@@ -127,11 +149,12 @@
 <div class="app">
   <header>
     <h1>一键签</h1>
-    <div class="tabs"><span id="tab-apps" class="on" onclick="showTab('apps')">装 App</span><span id="tab-mine" onclick="showTab('mine')">我的手机<span class="badge" id="minebadge" style="display:none"></span></span></div>
+    <div class="tabs"><span id="tab-apps" class="on" onclick="showTab('apps')">装 App</span><span id="tab-mine" onclick="showTab('mine')">我的手机<span class="badge" id="minebadge" style="display:none"></span></span><span id="tab-set" onclick="showTab('set')">软件源与证书</span></div>
     <p id="slogan" style="margin-left:6px">用自己的 Apple ID 免费签名，直接装到 iPhone / iPad</p>
     <span class="upd" id="upd"></span>
   </header>
   <main id="mineview" style="display:none;grid-template-columns:1fr;overflow-y:auto"></main>
+  <main id="setview" style="display:none;grid-template-columns:1fr;overflow-y:auto"></main>
   <main id="appsview">
     <div class="list" id="list"><div class="src">正在读取应用列表…</div></div>
     <div class="detail" id="detail"><div class="empty">← 选一个 App</div></div>
@@ -155,6 +178,18 @@
   <p id="updMsg" class="dim" style="min-height:1.2em"></p>
   <div class="row"><button class="ghost" id="updLater" onclick="closeUpdate()">以后再说</button>
     <button class="primary" id="updGo" onclick="doUpdate()">立即更新</button></div>
+</div></div>
+
+<div class="mask" id="certMask"><div class="dialog">
+  <h3>导入证书</h3>
+  <p>和全能签一样：选证书提供方给你的 <b>.p12 证书</b>、填密码、再选配套的 <b>描述文件（.mobileprovision）</b>。导入后用这张证书签名，不需要 Apple ID，也没有 7 天和 3 个 App 的限制。</p>
+  <label>证书（.p12）</label><div class="filebtn" id="certP12" onclick="pickCert('p12')">点这里选择 .p12 文件</div>
+  <label>证书密码（没有就留空）</label><input id="certPw" type="password" autocomplete="off">
+  <label>描述文件（.mobileprovision）</label><div class="filebtn" id="certProv" onclick="pickCert('prov')">点这里选择 .mobileprovision 文件</div>
+  <div class="err" id="certErr"></div>
+  <div class="safe" style="margin-top:12px"><div class="safe-note">证书和密码只保存在这台电脑上，只用来给 App 签名，不会上传。证书被苹果吊销（掉签）后装的 App 会打不开，这是证书本身的问题，换证书重装即可。</div></div>
+  <div class="row"><button class="ghost" onclick="closeCert()">取消</button>
+    <button class="primary" id="certGo" onclick="submitCert()">导入</button></div>
 </div></div>
 
 <div class="mask" id="loginMask"><div class="dialog">
@@ -183,12 +218,14 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const S = { installs: [], pilotOn: true, pilotMsg: null, tab: "apps", apps: [], custom: [], sel: null, devices: [], dev: null, busy: false };
+const S = { installs: [], pilotOn: true, pilotMsg: null, tab: "apps", apps: [], custom: [], sel: null, devices: [], dev: null, busy: false,
+  sources: [], q: "", fold: {}, sign: { mode: "apple_id", certs: [] }, cert: { p12: "", prov: "" } };
+const curCert = () => S.sign.certs.find(c => c.id === S.sign.mode);
 const allApps = () => S.apps.concat(S.custom);
 const iconHTML = (a, big) => a.icon ? `<img class="icon${big ? " big" : ""}" src="${a.icon}" alt="">`
   : `<div class="icon ph${big ? " big" : ""}">${esc((a.name || "?").slice(0, 1))}</div>`;
 function toast(t) { const el = $("toast"); el.textContent = t; el.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => el.style.display = "none", 4000); }
-const STEPS = [["device","连接手机"],["account","登录 Apple ID"],["download","准备安装包"],["install","签名并安装"],["trust","在手机上信任"]];
+const steps = () => [["device","连接手机"],["account", curCert() ? "检查证书" : "登录 Apple ID"],["download","准备安装包"],["install","签名并安装"],["trust","在手机上信任"]];
 const api = () => window.pywebview.api;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -200,7 +237,10 @@ window.onEvent = (ev, d) => {
   else if (ev === "installs") { S.installs = d.items; S.pilotOn = d.enabled; renderMine(); }
   else if (ev === "pilot") { S.pilotMsg = d; renderMine(); if (d.state !== "run") toast(d.text); }
   else if (ev === "catalog_error") $("list").innerHTML = `<div class="src" style="color:var(--accent)">应用列表加载失败：${esc(d)}</div>`;
-  else if (ev === "app_version") { Object.assign(S.apps.find(a => a.id === d.id) || {}, d); renderList(); if (S.sel === d.id && !S.busy) renderDetail(); }
+  else if (ev === "app_version") { const a = S.apps.find(a => a.id === d.id); if (a) { if (!d.icon) delete d.icon; Object.assign(a, d); } scheduleList(); if (S.sel === d.id && !S.busy) renderDetail(); }
+  else if (ev === "sources") { S.sources = d; renderList(); renderSet(); }
+  else if (ev === "source_added") { S.addingSource = false; $("srcUrl") && ($("srcUrl").value = ""); toast(`已添加「${d.name}」，共 ${d.count} 个 App`); renderSet(); }
+  else if (ev === "source_error") { S.addingSource = false; renderSet(); toast("没加上：" + d); }
   else if (ev === "step") setStep(d.step, d.state, d.note);
   else if (ev === "progress") { const b = document.querySelector(".bar"); if (b) { b.style.display = "block"; b.firstChild.style.width = (d.value*100).toFixed(0)+"%"; } }
   else if (ev === "log") msg(d);
@@ -212,19 +252,47 @@ window.onEvent = (ev, d) => {
   else if (ev === "self_update_progress") { updProgress(d); }
 };
 
+let listTimer = null;
+function scheduleList() { clearTimeout(listTimer); listTimer = setTimeout(() => renderList(), 120); }
+
 function renderList(d) {
-  if (d) { S.apps = d.apps; S.source = d.source; }
+  if (d) {
+    // 保留已经拿到的图标（新列表先不带图标，图标随后一个个补）
+    const icons = Object.fromEntries(S.apps.filter(a => a.icon).map(a => [a.id, a.icon]));
+    S.apps = d.apps.map(a => (a.icon || !icons[a.id]) ? a : { ...a, icon: icons[a.id] }); S.source = d.source;
+  }
+  const verText = a => a.custom ? "v" + esc(a.version) + " · " + (a.size / 1048576).toFixed(1) + " MB"
+    : a.unsupported ? esc(a.unsupported) : a.version ? "最新 v" + esc(a.version) : (a.has_asset === false ? "暂无安装包" : "读取版本…");
   const card = a => `
-    <div class="item ${a.id === S.sel ? "on" : ""}" onclick="select('${a.id}')">
+    <div class="item ${a.id === S.sel ? "on" : ""} ${a.unsupported ? "dis" : ""}" onclick="select('${esc(a.id)}')">
       ${iconHTML(a)}
       <div style="min-width:0"><h3>${esc(a.name)}</h3><div class="s">${esc(a.subtitle)}</div>
-      <div class="v">${a.custom ? "v" + esc(a.version) + " · " + (a.size / 1048576).toFixed(1) + " MB"
-        : a.version ? "最新 v" + esc(a.version) : (a.has_asset === false ? "暂无安装包" : "读取版本…")}</div></div>
+      <div class="v">${verText(a)}</div></div>
     </div>`;
-  $("list").innerHTML = `<div class="src" style="display:flex;align-items:center">共 ${S.apps.length} 个 App · 列表来自 ${esc(S.source || "…")}<span class="link" id="refbtn" style="margin-left:auto" onclick="doRefresh()">${S.refreshing ? "刷新中…" : "⟳ 刷新"}</span></div>`
-    + S.apps.map(card).join("")
-    + (S.custom.length ? `<div class="group">我添加的 IPA</div>` + S.custom.map(card).join("") : "")
+  const q = S.q.trim().toLowerCase();
+  const hit = a => !q || (a.name + " " + (a.subtitle || "") + " " + (a.bundle_id || "")).toLowerCase().includes(q);
+  const srcs = S.sources.length ? S.sources : [{ id: "official", name: "一键签官方源", official: true }];
+  const total = S.apps.length;
+  let html = `<div class="src" style="display:flex;align-items:center">共 ${total} 个 App · ${srcs.length} 个软件源<span class="link" id="refbtn" style="margin-left:auto" onclick="doRefresh()">${S.refreshing ? "刷新中…" : "⟳ 刷新"}</span></div>`;
+  if (total > 6) html += `<input class="search" id="search" placeholder="搜索 App 名字 / 包名" value="${esc(S.q)}" oninput="S.q=this.value;renderList();">`;
+  for (const src of srcs) {
+    const apps = S.apps.filter(a => (a.source_id || "official") === src.id && hit(a));
+    if (srcs.length > 1 || src.error) {
+      const fold = S.fold[src.id] && !q;
+      html += `<div class="srchead" onclick="S.fold['${src.id}']=!S.fold['${src.id}'];renderList()"><b>${fold ? "▸" : "▾"} ${esc(src.name)}</b>${src.official ? '<span class="tag">默认</span>' : ""}<span class="cnt">${src.error ? '<span style="color:var(--accent)">读取失败</span>' : apps.length}</span></div>`;
+      if (fold) continue;
+    }
+    html += apps.map(card).join("");
+  }
+  const cus = S.custom.filter(hit);
+  html += (cus.length ? `<div class="group">我添加的 IPA</div>` + cus.map(card).join("") : "")
     + `<div class="addbtn" onclick="api().pick_ipa()">＋ 添加自己的 IPA<span style="color:var(--dim);font-size:12px">（也可拖进窗口）</span></div>`;
+  const focused = document.activeElement && document.activeElement.id === "search";
+  const pos = focused ? document.activeElement.selectionStart : 0;
+  const scroll = $("list").scrollTop;
+  $("list").innerHTML = html;
+  $("list").scrollTop = scroll;
+  if (focused && $("search")) { $("search").focus(); $("search").setSelectionRange(pos, pos); }
 }
 
 function doRefresh() {
@@ -234,11 +302,12 @@ function doRefresh() {
 
 function showTab(t) {
   S.tab = t;
-  $("tab-apps").className = t === "apps" ? "on" : ""; $("tab-mine").className = t === "mine" ? "on" : "";
+  for (const k of ["apps", "mine", "set"]) $("tab-" + k).className = t === k ? "on" : "";
   $("appsview").style.display = t === "apps" ? "grid" : "none";
   $("mineview").style.display = t === "mine" ? "block" : "none";
+  $("setview").style.display = t === "set" ? "block" : "none";
   $("slogan").style.display = t === "apps" ? "" : "none";
-  renderMine();
+  renderMine(); renderSet();
 }
 
 function fmtDays(x) {
@@ -256,7 +325,7 @@ function renderMine() {
     const [dt, dc] = fmtDays(i.days_left);
     const upd = i.latest && i.version && i.latest !== i.version ? ` · <span style="color:var(--accent)">有新版 v${esc(i.latest)}</span>` : "";
     return `<div class="inst">
-      <div><h4>${esc(i.name)} <span class="m">v${esc(i.version)}${upd}</span></h4>
+      <div><h4>${esc(i.name)} <span class="m">v${esc(i.version)}${upd}</span>${i.sign_mode === "cert" ? '<span class="tag">证书</span>' : ""}</h4>
         <div class="m">${esc(i.device)} · ${new Date(i.expires_at * 1000).toLocaleString("zh-CN", {month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit"})} 到期${i.running ? " · <span style='color:#ff9f0a'>正在续签…</span>" : ""}</div></div>
       <div class="days ${dc}">${dt}</div>
       <div style="display:flex;align-items:center;gap:8px" title="自动续签和更新"><span class="m">自动</span><span class="sw sm ${i.auto ? "on" : ""}" onclick="api().set_auto('${i.key}', ${!i.auto})"></span>
@@ -267,7 +336,7 @@ function renderMine() {
   $("mineview").innerHTML = `
     <div class="pilotbar">
       <div class="t"><h3>自动续签 + 自动更新</h3>
-        <p>免费 Apple ID 签的 App 只能用 7 天。打开这个开关后，只要电脑开着、手机连着数据线<b>或者和电脑在同一个 Wi‑Fi</b>，到期前 2 天会自动重新签名，有新版本也会自动装上，App 里的数据不会丢。</p>
+        <p>免费 Apple ID 签的 App 只能用 7 天；用证书签的跟着证书到期（一般一年）。打开这个开关后，只要电脑开着、手机连着数据线<b>或者和电脑在同一个 Wi‑Fi</b>，到期前 2 天会自动重新签名，有新版本也会自动装上，App 里的数据不会丢。</p>
         ${m ? `<div class="pilotmsg ${m.state}">${esc(m.text)}</div>` : ""}</div>
       <button class="smallbtn" onclick="doRefresh()">检查更新</button>
       <button class="smallbtn" onclick="api().renew_now()">立即全部续签</button>
@@ -281,6 +350,73 @@ function renderMine() {
       <div class="t"><h3>开机自动启动</h3><p>电脑开机后「一键签」自动在后台最小化运行，不用每次手动打开，续签和更新不会漏。</p></div>
       <span class="sw ${S.autostart ? "on" : ""}" onclick="api().set_autostart(${!S.autostart}).then(v => { S.autostart = v; renderMine(); })"></span>
     </div>`;
+}
+
+function fmtDate(t) { return t ? new Date(t * 1000).toLocaleDateString("zh-CN") : "—"; }
+
+function renderSet() {
+  if (S.tab !== "set") return;
+  const src = (S.sources.length ? S.sources : [{ id: "official", name: "一键签官方源", official: true }]).map(x => `
+    <div class="srow"><div class="t"><h4>${esc(x.name)} ${x.official ? '<span class="tag">默认 · 不能删除</span>' : ""}</h4>
+      <div class="m">${x.official ? "DouDuo、GuoDuo 等官方 App（Gitee + GitHub 镜像）" : esc(x.url)}</div>
+      ${x.error ? `<div class="e">读取失败：${esc(x.error)}</div>` : ""}</div>
+      <span class="m">${x.count ?? ""} 个 App</span>
+      ${x.official ? "" : `<button class="smallbtn" onclick="if(confirm('删除这个软件源？已经装到手机上的 App 不受影响，但以后不会再自动更新。')) api().remove_source('${x.id}')">删除</button>`}
+    </div>`).join("");
+  const now = Date.now() / 1000;
+  const certRow = c => {
+    const left = (c.expires_at - now) / 86400;
+    const exp = left < 0 ? '<span style="color:var(--accent)">已过期</span>' : `${fmtDate(c.expires_at)} 到期（剩 ${Math.floor(left)} 天）`;
+    return `<div class="srow"><span class="radio ${S.sign.mode === c.id ? "on" : ""}" onclick="setMode('${c.id}')"></span>
+      <div class="t" onclick="setMode('${c.id}')" style="cursor:pointer"><h4>${esc(c.team_name || c.name)} <span class="m" style="display:inline">${esc(c.team)}</span></h4>
+        <div class="m">${esc(c.name)} · ${exp}</div>
+        <div class="m">描述文件「${esc(c.prov_name)}」· ${c.wildcard ? "通配符，能签任何 App" : "只能签 " + esc(c.app_id.replace(/^[A-Z0-9]{10}\./, ""))} · ${c.all_devices ? "所有设备" : c.device_count + " 台设备"}</div></div>
+      <button class="smallbtn" onclick="if(confirm('删除这张证书？')) api().remove_cert('${c.id}').then(d => { S.sign = d; renderSet(); })">删除</button></div>`;
+  };
+  const dev = S.dev ? `当前手机「${esc(S.dev.name)}」UDID：<span style="-webkit-user-select:text;user-select:text;color:var(--sub)">${esc(S.dev.udid)}</span>（找证书提供方加设备时发这个）` : "连上手机后这里会显示它的 UDID";
+  $("setview").innerHTML = `<div class="set">
+    <div class="panel"><h3>软件源</h3><p>和全能签的「软件源」一样：填源地址，源里的 App 会出现在「装 App」里，点一键安装就自动下载、签名、装上；装过的 App 有新版本会自动更新。</p>
+      <div class="row2"><input id="srcUrl" placeholder="粘贴软件源地址，例如 https://xxx.com/source.json" spellcheck="false" onkeydown="if(event.key==='Enter')addSource()">
+        <button class="go" style="padding:9px 18px;font-size:14px" onclick="addSource()" ${S.addingSource ? "disabled" : ""}>${S.addingSource ? "读取中…" : "添加"}</button></div>
+      <div style="margin-top:8px">${src}</div></div>
+    <div class="panel"><h3>签名方式</h3><p>默认用免费 Apple ID。有证书（.p12 + 描述文件）可以导入，用证书签不需要登录 Apple ID，App 跟着证书到期（一般一年），也没有同时 3 个的限制。</p>
+      <div class="srow"><span class="radio ${S.sign.mode === "apple_id" ? "on" : ""}" onclick="setMode('apple_id')"></span>
+        <div class="t" onclick="setMode('apple_id')" style="cursor:pointer"><h4>免费 Apple ID</h4><div class="m">每 7 天自动续签 · 同时最多 3 个 App · 每 7 天最多 10 个 App ID</div></div></div>
+      ${S.sign.certs.map(certRow).join("")}
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center"><button class="smallbtn" onclick="openCert()">＋ 导入证书</button><span class="m" style="color:var(--dim);font-size:12px">${dev}</span></div></div>
+  </div>`;
+}
+
+function addSource() {
+  const u = ($("srcUrl").value || "").trim(); if (!u || S.addingSource) return;
+  S.addingSource = true; renderSet(); api().add_source(u);
+}
+function setSlogan() { $("slogan").textContent = curCert() ? "用导入的证书签名，直接装到 iPhone / iPad" : "用自己的 Apple ID 免费签名，直接装到 iPhone / iPad"; }
+function setMode(m) { api().set_sign_mode(m).then(d => { S.sign = d; setSlogan(); renderSet(); if (S.sel && !S.busy) renderDetail(); }); }
+function openCert() { S.cert = { p12: "", prov: "" }; $("certPw").value = ""; $("certErr").textContent = "";
+  $("certP12").textContent = "点这里选择 .p12 文件"; $("certP12").className = "filebtn";
+  $("certProv").textContent = "点这里选择 .mobileprovision 文件"; $("certProv").className = "filebtn";
+  $("certGo").disabled = false; $("certGo").textContent = "导入"; $("certMask").classList.add("show"); }
+function closeCert() { $("certMask").classList.remove("show"); }
+async function pickCert(kind) {
+  const p = await api().pick_file(kind); if (!p) return;
+  S.cert[kind] = p; const el = $(kind === "p12" ? "certP12" : "certProv");
+  el.textContent = p.split(/[\\/]/).pop(); el.className = "filebtn set";
+}
+async function submitCert() {
+  if (!S.cert.p12) { $("certErr").textContent = "请选 .p12 证书"; return; }
+  if (!S.cert.prov) { $("certErr").textContent = "请选描述文件（.mobileprovision）"; return; }
+  $("certGo").disabled = true; $("certGo").textContent = "检查中…"; $("certErr").textContent = "";
+  const r = await api().add_cert(S.cert.p12, $("certPw").value, S.cert.prov);
+  $("certGo").disabled = false; $("certGo").textContent = "导入";
+  if (!r.ok) { $("certErr").textContent = r.error; return; }
+  $("certPw").value = ""; S.sign = { mode: r.mode, certs: r.certs }; setSlogan(); closeCert(); renderSet();
+  const c = r.added;
+  toast(`已导入证书「${c.team_name || c.name}」，现在用它签名`);
+  if (S.dev && !c.all_devices) {
+    const ok = await api().cert_covers(c.id, S.dev.udid);
+    if (!ok) toast(`注意：这张证书的描述文件里没有「${S.dev.name}」，用它装到这台手机会打不开`);
+  }
 }
 
 function removeCustom(id) {
@@ -300,11 +436,12 @@ function renderDetail() {
     <div class="head">${iconHTML(a, true)}
       <div><h2>${esc(a.name)}${a.custom ? '<span class="tag">本地 IPA</span>' : ""}</h2><div class="meta">${ver}${size}${minos}</div>
       ${a.homepage ? `<span class="link" onclick="api().open_url('${esc(a.homepage)}')">项目主页</span>` : ""}</div></div>
-    <div class="desc">${a.custom ? "包名 " + esc(a.bundle_id) + "<br>免费 Apple ID 签名后包名会加上你的团队后缀，跟原版 App 并存。" : esc(a.description)}</div>
-    <ul class="steps">${STEPS.map(([k,t]) => `<li id="st-${k}"><span class="dot"></span><span>${t}</span><span class="note"></span></li>`).join("")}</ul>
+    <div class="desc" style="max-height:110px;overflow:auto;white-space:pre-line">${a.custom ? "包名 " + esc(a.bundle_id) + "\n免费 Apple ID 签名后包名会加上你的团队后缀，跟原版 App 并存。" : esc(a.description)}</div>
+    <div class="note" style="margin-bottom:4px">签名方式：${curCert() ? "证书 · " + esc(curCert().team_name || curCert().name) : "免费 Apple ID（7 天，最多 3 个 App）"} <span class="link" onclick="showTab('set')">更换</span></div>
+    <ul class="steps">${steps().map(([k,t]) => `<li id="st-${k}"><span class="dot"></span><span>${t}</span><span class="note"></span></li>`).join("")}</ul>
     <div class="bar"><i></i></div>
     <div class="msg" id="msg"></div>
-    <div class="actions">${a.custom ? `<button class="ghostbtn" onclick="removeCustom('${a.id}')">从列表移除</button>` : ""}<button class="go" id="go" onclick="go()" ${a.has_asset === false ? "disabled" : ""}>${a.has_asset === false ? "暂无安装包" : "一键安装"}</button></div>`;
+    <div class="actions">${a.custom ? `<button class="ghostbtn" onclick="removeCustom('${a.id}')">从列表移除</button>` : ""}<button class="go" id="go" onclick="go()" ${a.has_asset === false || a.unsupported ? "disabled" : ""}>${a.unsupported ? "不支持" : a.has_asset === false ? "暂无安装包" : "一键安装"}</button></div>`;
   if (S.dev) setStep("device", "ok", S.dev.name);
 }
 
@@ -328,7 +465,8 @@ function finish(ok, err) {
   const g = $("go"); if (g) { g.disabled = false; g.textContent = "再装一次"; }
   if (ok) {
     setStep("trust", "on");
-    msg("✅ 已装到手机！第一次打开前，在手机上：\n① 设置 → 通用 → VPN 与设备管理 → 点你的 Apple ID → 信任\n② 如果提示需要开发者模式：设置 → 隐私与安全性 → 开发者模式 → 打开，按提示重启\n免费 Apple ID 签的 App 7 天后会过期，到时打开本软件再装一次即可（数据不丢）。", "ok");
+    msg(curCert() ? "✅ 已装到手机！第一次打开前，在手机上：\n① 设置 → 通用 → VPN 与设备管理 → 点证书对应的开发者 → 信任\n② 如果提示需要开发者模式：设置 → 隐私与安全性 → 开发者模式 → 打开，按提示重启\n有新版本会自动更新（电脑开着、手机连着或在同一 Wi‑Fi）。"
+      : "✅ 已装到手机！第一次打开前，在手机上：\n① 设置 → 通用 → VPN 与设备管理 → 点你的 Apple ID → 信任\n② 如果提示需要开发者模式：设置 → 隐私与安全性 → 开发者模式 → 打开，按提示重启\n免费 Apple ID 签的 App 7 天后会过期，一键签会在到期前自动续签（数据不丢）。", "ok");
   } else msg("没装上：" + err, "err");
 }
 
@@ -429,7 +567,9 @@ async function pollDevices() {
                                      : "未连接手机：用数据线把 iPhone 连到这台电脑，解锁后点「信任」";
     if (S.sel && !S.busy) setStep("device", S.dev ? "ok" : "", S.dev ? S.dev.name : "");
     const acc = await api().accounts();
-    $("acct").innerHTML = acc.length ? `Apple ID：${esc(acc[0])} <span class="link" style="margin-left:6px" onclick="doLogout()">退出</span>` : "";
+    const c = curCert();
+    $("acct").innerHTML = c ? `证书签名：${esc(c.team_name || c.name)} <span class="link" style="margin-left:6px" onclick="showTab('set')">更换</span>`
+      : acc.length ? `Apple ID：${esc(acc[0])} <span class="link" style="margin-left:6px" onclick="doLogout()">退出</span>` : "";
   } catch (e) {}
   setTimeout(pollDevices, 2500);
 }
@@ -448,6 +588,7 @@ window.addEventListener("pywebviewready", async () => {
   api().load(); pollDevices();
   api().installs().then(d => { S.installs = d.items; S.pilotOn = d.enabled; renderMine(); });
   api().autostart().then(v => { S.autostart = v; renderMine(); });
+  api().sign_modes().then(d => { S.sign = d; setSlogan(); renderSet(); });
   // 自检用：环境变量 ONETAP_AUTOINSTALL=<appid> 时，列表和手机就绪后自动点一键安装
   const auto = await api().auto_install();
   if (auto) {

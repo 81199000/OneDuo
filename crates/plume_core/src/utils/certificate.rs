@@ -164,6 +164,37 @@ impl CertificateIdentity {
         Ok(identity)
     }
 
+    /// 一键签证书模式：导入别人给的 .p12（全能签那种「证书 + 密码」）。
+    /// 支持新旧两种加密（p12-keystore 默认带 pbes1，3DES/RC2 的老 p12 也能读）。
+    pub fn new_with_p12(data: &[u8], password: &str) -> Result<Self, Error> {
+        let ks = p12_keystore::KeyStore::from_pkcs12(data, password)
+            .map_err(|e| Error::Certificate(format!("P12_BAD_PASSWORD_OR_FORMAT: {e}")))?;
+        let (_, chain) = ks
+            .private_key_chain()
+            .ok_or_else(|| Error::Certificate("P12_NO_PRIVATE_KEY".into()))?;
+        let leaf = chain
+            .chain()
+            .first()
+            .ok_or_else(|| Error::Certificate("P12_NO_CERTIFICATE".into()))?;
+        let cert_pem = encode_string("CERTIFICATE", LineEnding::LF, leaf.as_der()).unwrap();
+        let key_pem = encode_string("PRIVATE KEY", LineEnding::LF, chain.key()).unwrap();
+
+        let mut identity = Self {
+            cert: None,
+            key: None,
+            machine_id: None,
+            p12_data: Some(data.to_vec()),
+            serial_number: None,
+            new: false,
+        };
+        identity.resolve_certificate_from_contents(cert_pem.into_bytes())?;
+        identity.resolve_certificate_from_contents(key_pem.into_bytes())?;
+        if identity.key.is_none() {
+            return Err(Error::Certificate("P12_KEY_UNSUPPORTED".into()));
+        }
+        Ok(identity)
+    }
+
     // <config_path>/keys/<team_id>
     fn key_dir(path: PathBuf, team_id: &String) -> Result<PathBuf, Error> {
         let dir = path.join("keys").join(team_id);

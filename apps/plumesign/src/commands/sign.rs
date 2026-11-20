@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Args;
 
 use plume_core::{CertificateIdentity, MobileProvision};
-use plume_utils::{Bundle, Package, Signer, SignerMode, SignerOptions};
+use plume_utils::{Bundle, Package, PlistInfoTrait, Signer, SignerMode, SignerOptions};
 
 use crate::{
     commands::{
@@ -26,6 +26,12 @@ pub struct SignArgs {
     /// Use Apple ID credentials for signing
     #[arg(long = "apple-id")]
     pub apple_id: bool,
+    /// 一键签证书模式：导入的 .p12 证书（配合 --provision 描述文件）
+    #[arg(long = "p12", value_name = "P12", conflicts_with_all = ["apple_id", "pem_files"])]
+    pub p12: Option<PathBuf>,
+    /// .p12 的密码（也可用环境变量 PLUME_P12_PASSWORD，免得出现在进程列表里）
+    #[arg(long = "p12-password", value_name = "PASSWORD", requires = "p12")]
+    pub p12_password: Option<String>,
     /// Provisioning profile files to embed
     #[arg(long = "provision", value_name = "PROVISION")]
     pub provisioning_files: Option<PathBuf>,
@@ -57,7 +63,10 @@ pub struct SignArgs {
 }
 
 pub async fn execute(args: SignArgs) -> Result<()> {
-    if !args.package.is_dir() && !args.apple_id && args.output.is_none() {
+    if args.p12.is_some() && args.provisioning_files.is_none() {
+        return Err(anyhow::anyhow!("PLUME_CERT_NEED_PROVISION: --p12 需要同时给 --provision 描述文件"));
+    }
+    if !args.package.is_dir() && !args.apple_id && args.p12.is_none() && args.output.is_none() {
         return Err(anyhow::anyhow!(
             "-o/--output is required when signing an .ipa without --apple-id (ad-hoc mode)."
         ));
@@ -85,7 +94,18 @@ pub async fn execute(args: SignArgs) -> Result<()> {
         (bundle, Some(pkg))
     };
 
-    let (mut signer, team_id_opt) = if let Some(ref pem_files) = args.pem_files {
+    let (mut signer, team_id_opt) = if let Some(ref p12_path) = args.p12 {
+        let pw = args
+            .p12_password
+            .clone()
+            .or_else(|| std::env::var("PLUME_P12_PASSWORD").ok())
+            .unwrap_or_default();
+        let data = std::fs::read(p12_path)?;
+        let cert_identity = CertificateIdentity::new_with_p12(&data, &pw)?;
+        options.mode = SignerMode::Pem;
+        // 证书模式不改包名：描述文件绑定的就是原包名（或通配符），改了反而对不上
+        (Signer::new(Some(cert_identity), options), None)
+    } else if let Some(ref pem_files) = args.pem_files {
         let cert_identity = CertificateIdentity::new_with_paths(Some(pem_files.clone())).await?;
 
         options.mode = SignerMode::Pem;
@@ -115,6 +135,16 @@ pub async fn execute(args: SignArgs) -> Result<()> {
 
     if let Some(provision_path) = args.provisioning_files {
         let prov = MobileProvision::load_with_path(&provision_path)?;
+        // 证书模式：描述文件绑的是具体包名（不是通配符 *）时，像全能签一样把包名改成描述文件里的，
+        // 否则装机会报「描述文件和 App 不匹配」。通配符描述文件保持原包名。
+        if args.p12.is_some() && signer.options.custom_identifier.is_none() {
+            if let Some(pid) = prov.bundle_id() {
+                if !pid.contains('*') && bundle.get_bundle_identifier().as_deref() != Some(pid.as_str()) {
+                    log::info!("PLUME_CERT_BUNDLE_ID {}", pid);
+                    signer.options.custom_identifier = Some(pid);
+                }
+            }
+        }
         signer.provisioning_files.push(prov.clone());
     }
 

@@ -39,6 +39,10 @@ UA = f"OneDuo/{VERSION}"
 
 
 def data_dir() -> Path:
+    if os.environ.get("ONETAP_DATA_DIR"):      # 测试用：换一个数据目录，不动真实配置
+        d = Path(os.environ["ONETAP_DATA_DIR"])
+        d.mkdir(parents=True, exist_ok=True)
+        return d
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home()))
     elif sys.platform == "darwin":
@@ -103,6 +107,8 @@ class AppEntry:
     homepage: str = ""
     gitee_repo: str = ""                      # Gitee 镜像仓库（拼国内下载地址）
     sources: list = field(default_factory=list)   # 软件源 JSON 地址（全能签同款格式），版本从这里读
+    source_id: str = "official"               # 来自哪个软件源（official = 一键签官方源）
+    unsupported: str = ""                     # 不能装的原因（需要解锁码 / 蓝奏云网盘链接等），空 = 能装
     # 运行时补
     latest_version: Optional[str] = None
     asset_url: Optional[str] = None
@@ -189,24 +195,102 @@ def load_icon(cat: Catalog, app: AppEntry) -> Optional[bytes]:
         return local.read_bytes() if local.exists() else None
 
 
-def _source_versions(raw: bytes, bundle_id: str) -> list[dict]:
-    """软件源 JSON（全能签 / ESign / AltStore 同款格式）里这个包名的所有版本"""
-    j = json.loads(raw.decode("utf-8"))
+def sg(d: dict, *keys, default=""):
+    """软件源字段名各家不统一（downloadURL / downloadUrl / down …），挨个试"""
+    for k in keys:
+        v = d.get(k)
+        if v not in (None, ""):
+            return v
+    return default
+
+
+def source_versions(j: dict, bundle_id: str = "", name: str = "") -> list[dict]:
+    """软件源 JSON（全能签 / ESign / AltStore 同款格式）里某个 App 的所有版本。
+    bundle_id 为空时按名字匹配（有的源不写包名）。"""
     out = []
-    for a in j.get("apps", []):
-        if bundle_id and a.get("bundleIdentifier") not in (bundle_id, None):
+    for a in j.get("apps", []) or []:
+        bid = sg(a, "bundleIdentifier", "bundleID", "bundleId")
+        if bundle_id and bid != bundle_id:
+            continue
+        if not bundle_id and name and sg(a, "name", "appName") != name:
             continue
         vers = a.get("versions") or [a]          # AltStore 新格式把版本放 versions[]
         for v in vers:
-            url = v.get("downloadURL") or a.get("downloadURL")
-            ver = str(v.get("version") or a.get("version") or "")
-            if url and ver:
-                try:
-                    size = int(v.get("size") or a.get("size") or 0)
-                except (TypeError, ValueError):
-                    size = 0
-                out.append({"version": ver, "url": url, "size": size})
+            url = sg(v, "downloadURL", "downloadUrl", "down") or sg(a, "downloadURL", "downloadUrl", "down")
+            ver = str(sg(v, "version") or sg(a, "version"))
+            if not (url and ver):
+                continue
+            try:
+                size = int(sg(v, "size", default=0) or sg(a, "size", default=0) or 0)
+            except (TypeError, ValueError):
+                size = 0
+            lock = str(sg(v, "lock") or sg(a, "lock")) == "1"
+            lanzou = str(sg(v, "isLanZouCloud") or sg(a, "isLanZouCloud")) == "1"
+            out.append({"version": ver, "url": url, "size": size,
+                        "notes": str(sg(v, "versionDescription", "localizedDescription") or ""),
+                        "unsupported": "需要解锁码，一键签不支持" if lock else ("网盘链接，不能直接下载" if lanzou else "")})
     return out
+
+
+def _vkey(v: str) -> list[int]:
+    return [int(x) for x in re.findall(r"\d+", v)]
+
+
+_src_cache: dict[str, tuple[float, dict]] = {}
+_src_lock = threading.Lock()
+
+
+def fetch_source(url: str, ttl: float = 120) -> dict:
+    """拉一个软件源 JSON。2 分钟内同一个地址只拉一次（一个源几百个 App 时不会拉几百遍）；
+    拉不到用本地上次的副本，离线也能显示列表"""
+    now = time.time()
+    with _src_lock:
+        hit = _src_cache.get(url)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+    import hashlib
+    disk = data_dir() / "sources-cache" / (hashlib.sha1(url.encode()).hexdigest()[:16] + ".json")
+    try:
+        raw = http_get(url, timeout=12)
+        try:
+            j = json.loads(raw.decode("utf-8-sig"))
+        except ValueError:
+            raise ValueError("这个地址返回的不是软件源（应该是 JSON 文件）") from None
+        if not isinstance(j, dict) or not isinstance(j.get("apps"), list):
+            raise ValueError("这个地址返回的不是软件源（缺少 apps 列表）")
+        disk.parent.mkdir(exist_ok=True)
+        disk.write_bytes(raw)
+    except Exception:
+        if disk.exists():
+            j = json.loads(disk.read_bytes().decode("utf-8-sig"))
+        else:
+            raise
+    with _src_lock:
+        _src_cache[url] = (now, j)
+    return j
+
+
+def apply_versions(app: "AppEntry", found: list[dict]) -> bool:
+    """从软件源版本列表里挑最新的能装的版本，填进 app。挑到返回 True"""
+    ok = [v for v in found if not v["unsupported"]]
+    if not ok:
+        if found:
+            app.unsupported = found[0]["unsupported"]
+        return False
+    best = max(ok, key=lambda v: _vkey(v["version"]))
+    same = [v for v in ok if v["version"] == best["version"]]
+    app.latest_version = best["version"]
+    app.asset_size = max(v["size"] for v in same)
+    urls = []
+    for v in sorted(same, key=lambda v: ("gitee.com" not in v["url"]) if is_cn() else ("gitee.com" in v["url"])):
+        for u in _mirror_urls(app, best["version"], v["url"]):
+            if u not in urls:
+                urls.append(u)
+    app.asset_urls = urls
+    app.asset_url = urls[0]
+    app.asset_api_url = None
+    app.unsupported = ""
+    return True
 
 
 def _latest_cache() -> Path:
@@ -249,26 +333,16 @@ def resolve_latest(app: AppEntry) -> None:
     if srcs:
         found: list[dict] = []
         with ThreadPoolExecutor(len(srcs)) as ex:
-            futs = [ex.submit(http_get, u, 10) for u in srcs]
+            futs = [ex.submit(fetch_source, u) for u in srcs]
             for f in as_completed(futs):
                 try:
-                    found += _source_versions(f.result(), app.bundle_id)
+                    found += source_versions(f.result(), app.bundle_id, "" if app.bundle_id else app.name)
                 except Exception as e:  # noqa: BLE001
                     errors.append(f"源：{e}")
-        if found:
-            best = max(found, key=lambda v: [int(x) for x in re.findall(r"\d+", v["version"])])
-            same = [v for v in found if v["version"] == best["version"]]
-            app.latest_version = best["version"]
-            app.asset_size = max(v["size"] for v in same)
-            urls = []
-            for v in sorted(same, key=lambda v: ("gitee.com" not in v["url"]) if is_cn() else ("gitee.com" in v["url"])):
-                for u in _mirror_urls(app, best["version"], v["url"]):
-                    if u not in urls:
-                        urls.append(u)
-            app.asset_urls = urls
-            app.asset_url = urls[0]
-            app.asset_api_url = None
+        if apply_versions(app, found):
             _save_latest(app)
+            return
+        if app.unsupported:
             return
     if app.repo:
         # ② releases/latest 会 302 到 /releases/tag/vX.Y.Z，不算 API 次数
@@ -399,6 +473,11 @@ class SignError(RuntimeError):
 
 
 _FRIENDLY = [
+    (r"P12_BAD_PASSWORD_OR_FORMAT", "证书密码不对，或者这不是 .p12 证书文件"),
+    (r"P12_NO_PRIVATE_KEY|P12_NO_CERTIFICATE|P12_KEY_UNSUPPORTED", "这个 .p12 里没有可用的证书和私钥"),
+    (r"PROV_BAD_FORMAT|ProvisioningEntitlementsUnknown", "描述文件（.mobileprovision）读不出来，确认文件没损坏"),
+    (r"ApplicationVerificationFailed|0xe8008015|A valid provisioning profile", "手机拒绝安装：描述文件不包含这台手机，或者证书已被苹果吊销（掉签）"),
+    (r"0xe800801c|no longer valid|revoked", "证书已被苹果吊销（掉签），换一个证书"),
     (r"Incorrect|-20101|invalid.*credentials|password", "Apple ID 或密码不对"),
     (r"maximum number of apps|limit.*app ids|-7.*7.?day", "免费 Apple ID 7 天内最多注册 10 个 App ID，过几天再装或换个 Apple ID"),
     (r"3 apps|maximum.*installed|too many", "免费 Apple ID 同时最多装 3 个自签 App，先删掉一个再装"),
@@ -427,9 +506,11 @@ class PlumeRunner:
             raise SignError("找不到签名组件 plumesign")
         self.on_line = on_line
         self.proc: Optional[subprocess.Popen] = None
+        self.extra_env: dict = {}
 
     def _env(self):
         env = dict(os.environ)
+        env.update(self.extra_env)
         env["RUST_LOG"] = "info"   # 验证码提示、安装进度都靠 info 日志
         env["NO_COLOR"] = "1"
         return env
@@ -544,6 +625,14 @@ def wifi_sync(udid: str, on: Optional[bool] = None) -> Optional[bool]:
 
 def sign_and_install(ipa: Path, udid: str, on_line) -> None:
     PlumeRunner(on_line).run(["sign", "--apple-id", "-p", str(ipa), "--register-and-install", "--udid", udid])
+
+
+def sign_and_install_cert(ipa: Path, udid: str, p12: Path, password: str, provision: Path, on_line) -> None:
+    """证书模式（全能签那种）：导入的 .p12 + 描述文件签名，不用 Apple ID。密码走环境变量，不出现在进程列表里"""
+    r = PlumeRunner(on_line)
+    r.extra_env = {"PLUME_P12_PASSWORD": password}
+    r.run(["sign", "--p12", str(p12), "--provision", str(provision), "-p", str(ipa),
+           "--register-and-install", "--udid", udid])
 
 
 # MARK: 自身更新
