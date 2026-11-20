@@ -18,7 +18,7 @@ from pathlib import Path
 
 import webview
 
-from . import autopilot, selfupdate, core
+from . import autopilot, certs, selfupdate, sources, core
 
 # 日志：~/Library/Logs/OneTapInstall.log（Windows 在 %APPDATA%\\OneTapInstall），闪退也能事后查
 LOG_PATH = (Path.home() / "Library" / "Logs" / "OneTapInstall.log") if sys.platform == "darwin" else core.data_dir() / "OneTapInstall.log"
@@ -71,43 +71,160 @@ class Api:
         return core.VERSION
 
     def load(self):
-        """读列表 + 图标 + 最新版本（后台线程，逐个推给界面）"""
-        def work():
+        """读官方源（catalog）+ 用户加的软件源，图标和最新版本逐个推给界面（后台线程）"""
+        threading.Thread(target=self._load_all, args=(False,), daemon=True).start()
+
+    def _app_json(self, a: core.AppEntry, icon: bool = True) -> dict:
+        ic = a.icon_bytes if icon else None
+        return {"id": a.id, "name": a.name, "subtitle": a.subtitle, "description": a.description,
+                "min_ios": a.min_ios, "homepage": a.homepage, "source_id": a.source_id,
+                "bundle_id": a.bundle_id, "version": a.latest_version, "size": a.asset_size,
+                "has_asset": bool(a.asset_url) if a.latest_version or a.unsupported else None,
+                "unsupported": a.unsupported,
+                "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""}
+
+    def _fetch_icon(self, cat, a: core.AppEntry):
+        if a.icon_bytes:
+            return
+        if a.source_id == sources.OFFICIAL_ID:
+            a.icon_bytes = core.load_icon(cat, a)
+        elif a.icon.startswith(("http://", "https://")):
             try:
-                cat = core.load_catalog()
-            except Exception as e:  # noqa: BLE001
-                self.push("catalog_error", str(e))
-                return
+                a.icon_bytes = core.cgbi_to_png(core.http_get(a.icon, timeout=10))
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _push_sources(self, groups: dict, errors: dict):
+        out = [{"id": sources.OFFICIAL_ID, "name": "一键签官方源", "official": True,
+                "count": len(groups.get(sources.OFFICIAL_ID, [])), "error": errors.get(sources.OFFICIAL_ID, "")}]
+        for src in sources.load():
+            out.append({"id": src["id"], "name": src.get("name") or src["url"], "url": src["url"], "official": False,
+                        "count": len(groups.get(src["id"], [])), "error": errors.get(src["id"], "")})
+        self.push("sources", out)
+
+    def _load_all(self, manual: bool):
+        before = {k: v.latest_version for k, v in self._apps.items() if not v.local_path}
+        groups: dict[str, list] = {}
+        errors: dict[str, str] = {}
+        # 官方源（catalog/apps.json）
+        try:
+            cat = core.load_catalog()
             self._catalog = cat
-            self._apps = {a.id: a for a in cat.apps}
-            self.push_custom()
-            out = []
-            for a in cat.apps:
-                ic = core.load_icon(cat, a)
-                out.append({"id": a.id, "name": a.name, "subtitle": a.subtitle, "description": a.description,
-                            "min_ios": a.min_ios, "homepage": a.homepage,
-                            "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""})
-            self.push("catalog", {"apps": out, "source": cat.source})
-            self.push_installs()
+            groups[sources.OFFICIAL_ID] = cat.apps
             for a in cat.apps:
                 try:
                     core.resolve_latest(a)
-                except Exception:  # noqa: BLE001
-                    pass
-                self.push("app_version", {"id": a.id, "version": a.latest_version,
-                                          "size": a.asset_size, "has_asset": bool(a.asset_url)})
-            if core.newer(cat.installer_latest, core.VERSION):
-                url = cat.installer_download.get("gitee" if core.is_cn() else "github") \
-                    or cat.installer_download.get("github", "")
-                self._update = (cat.installer_latest, selfupdate.asset_for(cat))
-                auto = selfupdate.can_self_update() and bool(self._update[1])
-                self.push("self_update", {"version": cat.installer_latest, "current": core.VERSION,
-                                          "notes": cat.installer_notes, "url": url, "auto": auto})
-                if auto and (core.data_dir() / "autoupdate-test").exists():
-                    log.info("autoupdate-test flag: updating to %s", cat.installer_latest)
-                    (core.data_dir() / "autoupdate-test").unlink(missing_ok=True)
-                    self.self_update()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("resolve %s failed: %s", a.id, e)
+        except Exception as e:  # noqa: BLE001
+            cat = self._catalog
+            errors[sources.OFFICIAL_ID] = str(e)[:160]
+            if not cat:
+                self.push("catalog_error", str(e))
+        # 用户源：几个一起拉
+        from concurrent.futures import ThreadPoolExecutor
+        user = sources.load()
+        if user:
+            with ThreadPoolExecutor(min(6, len(user))) as ex:
+                for src, (apps, err) in zip(user, ex.map(sources.apps_from_source, user)):
+                    groups[src["id"]] = apps
+                    if err:
+                        errors[src["id"]] = err
+        # 换掉列表（保留已拿到的图标），自己加的 IPA 不动
+        new = {}
+        for apps in groups.values():
+            for a in apps:
+                old = self._apps.get(a.id)
+                if old and old.icon_bytes:
+                    a.icon_bytes = old.icon_bytes
+                new[a.id] = a
+        for k, v in self._apps.items():
+            if v.local_path:
+                new[k] = v
+            elif k not in new and any(r["app_id"] == k for r in autopilot.load().values()):
+                new[k] = v     # 源暂时拉不到：装过的 App 先留着，免得「我的手机」里对不上
+        self._apps = new
+        self._push_sources(groups, errors)
+        self.push("catalog", {"apps": [self._app_json(a, icon=False) for g in groups.values() for a in g],
+                              "source": cat.source if cat else ""})
+        self.push_custom()
+        self.push_installs()
+        # 图标慢慢补（用户源可能上百个 App，别卡列表）
+        from concurrent.futures import ThreadPoolExecutor as TP
+        with TP(8) as ex:
+            allapps = [a for g in groups.values() for a in g]
+            for a, _ in zip(allapps, ex.map(lambda x: self._fetch_icon(cat, x), allapps)):
+                if a.icon_bytes:
+                    self.push("app_version", self._app_json(a))
+        if manual:
+            changed = [f"{a.name} v{a.latest_version}" for k, a in self._apps.items()
+                       if before.get(k) and a.latest_version and a.latest_version != before[k]]
+            self._pilot._last_update_check = time.time()
+            self._pilot.poke()
+            self.push("refreshed", "发现新版本：" + "、".join(changed) if changed else "已是最新")
+        if cat and core.newer(cat.installer_latest, core.VERSION) and not getattr(self, "_upd_pushed", False):
+            self._upd_pushed = True
+            url = cat.installer_download.get("gitee" if core.is_cn() else "github") \
+                or cat.installer_download.get("github", "")
+            self._update = (cat.installer_latest, selfupdate.asset_for(cat))
+            auto = selfupdate.can_self_update() and bool(self._update[1])
+            self.push("self_update", {"version": cat.installer_latest, "current": core.VERSION,
+                                      "notes": cat.installer_notes, "url": url, "auto": auto})
+            if auto and (core.data_dir() / "autoupdate-test").exists():
+                log.info("autoupdate-test flag: updating to %s", cat.installer_latest)
+                (core.data_dir() / "autoupdate-test").unlink(missing_ok=True)
+                self.self_update()
+
+    # MARK: 软件源
+
+    def add_source(self, url):
+        def work():
+            try:
+                rec = sources.add(url)
+                log.info("source added %s (%s apps)", rec["url"], rec["count"])
+                self.push("source_added", {"id": rec["id"], "name": rec["name"], "count": rec["count"]})
+                self._load_all(False)
+            except Exception as e:  # noqa: BLE001
+                self.push("source_error", str(e) if isinstance(e, core.SignError) else core.friendly(str(e)))
         threading.Thread(target=work, daemon=True).start()
+
+    def remove_source(self, sid):
+        if sid == sources.OFFICIAL_ID:
+            return
+        sources.remove(sid)
+        threading.Thread(target=self._load_all, args=(False,), daemon=True).start()
+
+    # MARK: 签名方式（Apple ID / 证书）
+
+    def sign_modes(self):
+        return {"mode": certs.mode(), "certs": [certs.public(c) for c in certs.load()]}
+
+    def set_sign_mode(self, m):
+        certs.set_mode(m)
+        return self.sign_modes()
+
+    def pick_file(self, kind):
+        types = {"p12": ("证书 (*.p12;*.pfx)", "所有文件 (*.*)"),
+                 "prov": ("描述文件 (*.mobileprovision)", "所有文件 (*.*)")}[kind]
+        paths = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=types) if self._window else None
+        return paths[0] if paths else ""
+
+    def add_cert(self, p12, password, prov):
+        try:
+            c = certs.add(p12, password or "", prov)
+            certs.set_mode(c["id"])
+            log.info("cert added %s team=%s devices=%d", c["name"], c["team"], len(c["devices"]))
+            return {"ok": True, **self.sign_modes(), "added": certs.public(c)}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e) if isinstance(e, core.SignError) else core.friendly(str(e))}
+
+    def cert_covers(self, cid, udid):
+        c = certs.get(cid)
+        return bool(c and certs.covers(c, udid))
+
+    def remove_cert(self, cid):
+        certs.remove(cid)
+        return self.sign_modes()
 
     @staticmethod
     def _custom_json(a: core.AppEntry) -> dict:
@@ -168,45 +285,8 @@ class Api:
         self.push_custom()
 
     def refresh(self):
-        """「刷新」：重新拉应用列表和每个 App 的最新版本，顺便让自动更新马上检查一轮"""
-        def work():
-            try:
-                cat = core.load_catalog()
-                for a in cat.apps:
-                    old = self._apps.get(a.id)
-                    if old and not old.local_path:
-                        a.icon_bytes = old.icon_bytes
-                self._catalog = cat
-                for a in cat.apps:
-                    self._apps[a.id] = a
-                out = []
-                for a in cat.apps:
-                    ic = core.load_icon(cat, a)
-                    out.append({"id": a.id, "name": a.name, "subtitle": a.subtitle, "description": a.description,
-                                "min_ios": a.min_ios, "homepage": a.homepage,
-                                "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""})
-                self.push("catalog", {"apps": out, "source": cat.source})
-            except Exception as e:  # noqa: BLE001
-                log.warning("refresh catalog failed: %s", e)
-            changed = []
-            for a in list(self._apps.values()):
-                if a.local_path:
-                    continue
-                before = a.latest_version
-                try:
-                    core.resolve_latest(a)
-                except Exception as e:  # noqa: BLE001
-                    log.warning("resolve %s failed: %s", a.id, e)
-                self.push("app_version", {"id": a.id, "version": a.latest_version,
-                                          "size": a.asset_size, "has_asset": bool(a.asset_url)})
-                if before and a.latest_version and a.latest_version != before:
-                    changed.append(f"{a.name} v{a.latest_version}")
-            self.push_custom()
-            self._pilot._last_update_check = __import__("time").time()
-            self._pilot.poke()
-            self.push_installs()
-            self.push("refreshed", "发现新版本：" + "、".join(changed) if changed else "已是最新")
-        threading.Thread(target=work, daemon=True).start()
+        """「刷新」：重新拉所有软件源和最新版本，顺便让自动更新马上检查一轮"""
+        threading.Thread(target=self._load_all, args=(True,), daemon=True).start()
 
     def devices(self):
         devs = core.list_devices()
@@ -304,23 +384,36 @@ class Api:
                 self.push("log", short[:140])
 
         step = "account"
+        mode = certs.mode()
+        cert = certs.get(mode) if mode != certs.APPLE_ID else None
         try:
             self.push("step", {"step": "device", "state": "ok"})
             self.push("step", {"step": "account", "state": "run"})
-            accts = core.saved_accounts()
-            if accts:
-                self.push("log", f"使用已保存的 Apple ID：{accts[0]}，检查登录是否有效…")
-                if not core.session_ok():
-                    self.push("log", "登录已过期，需要重新输入密码")
-                    accts = []
-            if not accts:
-                creds = self._ask_login()
-                if not creds:
-                    raise core.SignError("已取消登录")
-                self.push("log", "正在登录 Apple ID…（只发给苹果，本软件不保存密码）")
-                core.login(creds[0], creds[1], on_line, self._ask_2fa)
+            if a.unsupported:
+                raise core.SignError(a.unsupported)
+            if cert:
+                dev = next((d for d in core.list_devices() if d.udid == udid), None)
+                certs.check_device(cert, udid, dev.name if dev else "这台手机")
+                bid = a.bundle_id or (core.inspect_ipa(a.local_path)["bundle_id"] if a.local_path else "")
+                certs.check_app(cert, bid, a.name)
+                self.push("step", {"step": "account", "state": "ok", "note": "证书：" + (cert.get("team_name") or cert.get("name", ""))})
+                accts = None
+            else:
                 accts = core.saved_accounts()
-            self.push("step", {"step": "account", "state": "ok", "note": accts[0] if accts else ""})
+            if not cert:
+                if accts:
+                    self.push("log", f"使用已保存的 Apple ID：{accts[0]}，检查登录是否有效…")
+                    if not core.session_ok():
+                        self.push("log", "登录已过期，需要重新输入密码")
+                        accts = []
+                if not accts:
+                    creds = self._ask_login()
+                    if not creds:
+                        raise core.SignError("已取消登录")
+                    self.push("log", "正在登录 Apple ID…（只发给苹果，本软件不保存密码）")
+                    core.login(creds[0], creds[1], on_line, self._ask_2fa)
+                    accts = core.saved_accounts()
+                self.push("step", {"step": "account", "state": "ok", "note": accts[0] if accts else ""})
             step = "download"
             self.push("step", {"step": "download", "state": "run"})
             if a.local_path:
@@ -334,7 +427,10 @@ class Api:
             step = "install"
             self.push("step", {"step": "install", "state": "run"})
             self.push("log", "正在签名并安装到手机，请保持手机解锁、数据线不要拔…")
-            core.sign_and_install(ipa, udid, on_line)
+            if cert:
+                certs.sign_and_install(cert, ipa, udid, on_line)
+            else:
+                core.sign_and_install(ipa, udid, on_line)
             self.push("step", {"step": "install", "state": "ok"})
             log.info("installed %s %s to %s", a.id, a.latest_version, udid)
             dev = next((d for d in core.list_devices() if d.udid == udid), None)
@@ -343,7 +439,7 @@ class Api:
             if dev and dev.model == "USB" and core.wifi_sync(udid) is False:
                 ok = core.wifi_sync(udid, True)
                 log.info("wifi sync enabled for %s: %s", dev_name, ok)
-            autopilot.record(udid, dev_name, a)
+            autopilot.record(udid, dev_name, a, mode)
             self.push_installs()
             self.push("done")
         except Exception as e:  # noqa: BLE001
@@ -365,7 +461,8 @@ class Api:
                         "days_left": round(autopilot.days_left(r), 2), "expires_at": r.get("expires_at", 0),
                         "auto": r.get("auto", True), "error": r.get("last_error", ""),
                         "latest": (a.latest_version if a and not a.local_path else "") or "",
-                        "running": self._pilot.current == key, "app_id": r["app_id"]})
+                        "running": self._pilot.current == key, "app_id": r["app_id"],
+                        "sign_mode": "cert" if r.get("sign_mode", certs.APPLE_ID) != certs.APPLE_ID else "apple_id"})
         return out
 
     def push_installs(self):

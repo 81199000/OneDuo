@@ -23,7 +23,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["app.webui", "app.core"],
+    hiddenimports=["app.webui", "app.core", "app.sources", "app.certs", "app.autopilot", "app.selfupdate"],
     excludes=["tkinter", "PIL", "app.ui"],
     noarchive=False,
 )

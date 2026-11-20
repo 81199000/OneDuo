@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import core
+from . import certs, core, sources
 
 log = logging.getLogger("onetap.autopilot")
 
@@ -51,16 +51,21 @@ def _save(d: dict) -> None:
     tmp.replace(_path())
 
 
-def record(udid: str, device: str, app: core.AppEntry) -> None:
-    """装成功后调：记下到期时间（签名时间 + 7 天）"""
+def record(udid: str, device: str, app: core.AppEntry, sign_mode: str = certs.APPLE_ID) -> None:
+    """装成功后调：记下用什么签的、哪天到期（Apple ID = 签名时间 + 7 天；证书 = 证书 / 描述文件到期日）"""
     now = time.time()
+    exp = now + SIGN_VALID
+    if sign_mode != certs.APPLE_ID:
+        c = certs.get(sign_mode)
+        exp = certs.expires_at(c) if c and certs.expires_at(c) else now + 365 * DAY
     with _lock:
         d = load()
         key = f"{udid}|{app.id}"
         old = d.get(key, {})
         d[key] = {"udid": udid, "device": device, "app_id": app.id, "name": app.name,
                   "version": app.latest_version or "", "custom": bool(app.local_path),
-                  "signed_at": now, "expires_at": now + SIGN_VALID,
+                  "source_id": app.source_id, "sign_mode": sign_mode,
+                  "signed_at": now, "expires_at": exp,
                   "auto": old.get("auto", True), "last_error": "", "last_try": now}
         _save(d)
 
@@ -138,17 +143,20 @@ class Autopilot:
         check_updates = now - self._last_update_check > UPDATE_CHECK_EVERY
         if check_updates:
             self._last_update_check = now
+            # 只查装过的 App（用户源里可能有几百个，没装的不用管）
+            installed = {r["app_id"] for r in load().values()}
             for a in apps.values():
-                if not a.local_path:
+                if not a.local_path and a.id in installed:
                     try:
-                        core.resolve_latest(a)
+                        sources.refresh_app(a)
                     except Exception:  # noqa: BLE001
                         pass
         jobs = []
         for key, rec in load().items():
             if not rec.get("auto", True):
                 continue
-            if rec.get("last_error") and now - rec.get("last_try", 0) < RETRY_AFTER:
+            retry = RETRY_AFTER if rec.get("sign_mode", certs.APPLE_ID) == certs.APPLE_ID else DAY
+            if rec.get("last_error") and now - rec.get("last_try", 0) < retry:
                 continue
             a = apps.get(rec["app_id"])
             if not a:
@@ -192,18 +200,33 @@ class Autopilot:
         log.info("autopilot %s %s (%.1f days left, via %s)", why, label, days_left(rec), dev.model)
         self.on_event("renew_start", info)
         try:
-            if not core.saved_accounts():
-                raise core.SignError("还没登录 Apple ID")
-            if not core.session_ok():
-                raise core.SignError("Apple ID 登录已过期，打开软件重新登录一次")
+            mode = rec.get("sign_mode", certs.APPLE_ID)
+            cert = None
+            if mode != certs.APPLE_ID:
+                cert = certs.get(mode)
+                if not cert:
+                    raise core.SignError("当初签名用的证书已经删掉了，打开软件重新装一次")
+                certs.check_device(cert, dev.udid, dev.name)
+                certs.check_app(cert, a.bundle_id or (core.inspect_ipa(a.local_path)["bundle_id"] if a.local_path else ""), a.name)
+                if why == "renew":
+                    # 证书模式到期 = 证书 / 描述文件本身到期，重签也续不了命，只能换证书
+                    raise core.SignError("证书快到期了，导入新证书后重新装一次")
+            else:
+                if not core.saved_accounts():
+                    raise core.SignError("还没登录 Apple ID")
+                if not core.session_ok():
+                    raise core.SignError("Apple ID 登录已过期，打开软件重新登录一次")
             if a.local_path:
                 ipa = Path(a.local_path)
                 if not ipa.exists():
                     raise core.SignError("IPA 文件找不到了")
             else:
                 ipa = core.download_ipa(a, lambda p: None, threading.Event())
-            core.sign_and_install(ipa, dev.udid, lambda line: None)
-            record(dev.udid, dev.name, a)
+            if cert:
+                certs.sign_and_install(cert, ipa, dev.udid, lambda line: None)
+            else:
+                core.sign_and_install(ipa, dev.udid, lambda line: None)
+            record(dev.udid, dev.name, a, mode)
             log.info("autopilot done %s", label)
             self.on_event("renew_done", info)
         except Exception as e:  # noqa: BLE001

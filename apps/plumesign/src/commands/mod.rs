@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 
 pub mod account;
+pub mod cert;
 pub mod device;
 pub mod macho;
 pub mod sign;
@@ -29,4 +30,6 @@ pub enum Commands {
     Account(account::AccountArgs),
     /// Device management commands
     Device(device::DeviceArgs),
+    /// 一键签：查看 .p12 证书 / 描述文件信息
+    Cert(cert::CertArgs),
 }
