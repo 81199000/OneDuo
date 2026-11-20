@@ -113,6 +113,8 @@ class AppEntry:
     asset_api_url: Optional[str] = None
     asset_size: int = 0
     asset_urls: list = field(default_factory=list)   # 同一版本的几个下载镜像，按优先级
+    latest_notes: str = ""                   # 最新版本更新了什么（软件源 versionDescription）
+    latest_date: str = ""                    # 最新版本发布日期（软件源 versionDate / date）
     installed_version: Optional[str] = None
     icon_bytes: Optional[bytes] = None
     # 用户自己加的本地 IPA（不走下载）
@@ -211,7 +213,11 @@ def source_versions(j: dict, bundle_id: str = "", name: str = "") -> list[dict]:
             lock = str(sg(v, "lock") or sg(a, "lock")) == "1"
             lanzou = str(sg(v, "isLanZouCloud") or sg(a, "isLanZouCloud")) == "1"
             out.append({"version": ver, "url": url, "size": size,
-                        "notes": str(sg(v, "versionDescription", "localizedDescription") or ""),
+                        # 更新说明：平铺格式（全能签/ESign）是 versionDescription；
+                        # AltStore 的 versions[] 里每个版本的 localizedDescription 就是该版本更新说明
+                        "notes": str(sg(v, "versionDescription", "changelog", "whatsNew")
+                                     or (sg(v, "localizedDescription") if v is not a else "") or ""),
+                        "date": str(sg(v, "versionDate", "date") or "")[:10],
                         "unsupported": "需要解锁码，一键签不支持" if lock else ("网盘链接，不能直接下载" if lanzou else "")})
     return out
 
@@ -264,6 +270,8 @@ def apply_versions(app: "AppEntry", found: list[dict]) -> bool:
     best = max(ok, key=lambda v: _vkey(v["version"]))
     same = [v for v in ok if v["version"] == best["version"]]
     app.latest_version = best["version"]
+    app.latest_notes = next((v["notes"] for v in same if v.get("notes")), "").strip()
+    app.latest_date = next((v["date"] for v in same if v.get("date")), "")
     app.asset_size = max(v["size"] for v in same)
     urls = []
     for v in sorted(same, key=lambda v: ("gitee.com" not in v["url"]) if is_cn() else ("gitee.com" in v["url"])):
@@ -286,7 +294,8 @@ def _save_latest(app: AppEntry) -> None:
         d = json.loads(_latest_cache().read_text("utf-8")) if _latest_cache().exists() else {}
     except Exception:  # noqa: BLE001
         d = {}
-    d[app.id] = {"version": app.latest_version, "urls": app.asset_urls, "size": app.asset_size, "at": time.time()}
+    d[app.id] = {"version": app.latest_version, "urls": app.asset_urls, "size": app.asset_size,
+                 "notes": app.latest_notes, "date": app.latest_date, "at": time.time()}
     _latest_cache().write_text(json.dumps(d, ensure_ascii=False), "utf-8")
 
 
@@ -330,6 +339,7 @@ def resolve_latest(app: AppEntry) -> None:
         c = json.loads(_latest_cache().read_text("utf-8")).get(app.id)
         if c and c.get("urls"):
             app.latest_version, app.asset_urls, app.asset_size = c["version"], c["urls"], c.get("size", 0)
+            app.latest_notes, app.latest_date = c.get("notes", ""), c.get("date", "")
             app.asset_url = app.asset_urls[0]
             return
     except Exception:  # noqa: BLE001
