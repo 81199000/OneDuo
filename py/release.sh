@@ -1,6 +1,8 @@
 #!/bin/zsh
 # 一键签发版（维护者在 Mac 上跑）：
 #   ./release.sh 0.1.1 "这一版的更新说明（显示在更新弹窗里）"
+#   每个安装包只编译一次、每个渠道只上传一次；上传完只读服务器返回的文件大小核对，不再下载回来。
+#   Windows 打包机默认 Administrator@192.168.10.11（5090 启动在 Win11 时），可用 ONETAP_WIN 改。
 #
 # 依次：改版本号 → Mac 打包 + 签名公证 → Windows 打包（远程 Windows 机器）→ GitHub Release（存档）
 #       → 【渠道①】Gitee 发行版 → 【渠道②】R2（dl.oneduo.app）→ 改 catalog/apps.json 并推到 Gitee + R2
@@ -17,7 +19,7 @@ VER=${1:?用法：./release.sh <版本号> "<更新说明>"}
 NOTES=${2:?要写更新说明（会显示在更新弹窗里）}
 TAG=v$VER
 ROOT=$(cd .. && pwd)
-REPO=WuWeiDuo/OneDuo
+REPO=81199000/OneDuo
 print() { builtin print -P "%F{cyan}== $1%f"; }
 die() { builtin print -P "%F{red}❌ $1%f"; exit 1; }
 
@@ -25,8 +27,18 @@ MAC=dist/OneDuo-$VER-macos-universal.zip
 WIN=dist/OneDuo-$VER-windows-x64-setup.exe
 [[ -z $(git -C "$ROOT" status --porcelain -uno) ]] || die "工作树有未提交的改动"
 
+# 发前检查（先在本机验证，验证不过就不编译、不上传）：代码能编译、模块能导入、依赖都在
+print "0/6 发前检查"
+python3 -m py_compile app/*.py || die "Python 代码编译不过"
+.venv-universal/bin/python -c "import app.core, app.sources, app.certs, app.selfupdate, app.autopilot, app.webui, certifi" \
+  || die "模块导入失败（缺依赖？先 .venv-universal/bin/pip install -r requirements.txt）"
+[[ -n $ONETAP_WIN ]] || ONETAP_WIN=Administrator@192.168.10.11   # Windows 打包机 = 5090（要启动在 Win11）
+ssh -4 -o BatchMode=yes -o ConnectTimeout=8 "$ONETAP_WIN" "hostname" >/dev/null 2>&1 \
+  || die "Windows 打包机 $ONETAP_WIN 连不上（5090 要启动在 Win11，不能在 Ubuntu）"
+export ONETAP_WIN
+echo "✅ 发前检查通过"
+
 if [[ -z $ONEDUO_PUBLISH ]]; then   # ONEDUO_PUBLISH=1：安装包已经发好（ONEDUO_HOLD 跑过），只做第 6 步
-[[ -n $ONETAP_WIN ]] || die "先 export ONETAP_WIN=用户@Windows机器IP"
 
 print "1/6 版本号 → $VER"
 sed -i '' -E "s/^VERSION = \".*\"/VERSION = \"$VER\"/" app/core.py

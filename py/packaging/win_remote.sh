@@ -1,5 +1,6 @@
 #!/bin/zsh
 # 【开发用】把当前 py/ 和 catalog/ 同步到 Windows 测试机（C:\onetap\src），然后在那边跑一段 PowerShell。
+# 只传源码（约 1MB）：Mac 打包用的 .venv-universal（70MB）不传——Windows 那边自己有 .venv。
 #   ./packaging/win_remote.sh sync                  只同步
 #   ./packaging/win_remote.sh run '<powershell>'    同步后在 C:\onetap\src\py 里跑
 #   ./packaging/win_remote.sh exec '<powershell>'   不同步直接跑
@@ -19,7 +20,7 @@ ps_run() {
 }
 
 sync() {
-  (cd "$ROOT" && rm -f "$S/onetap-src.zip" && zip -qr "$S/onetap-src.zip" py catalog -x 'py/.venv/*' 'py/build/*' 'py/dist/*' '*/__pycache__/*' 'py/packaging/OneTap.iconset/*')
+  (cd "$ROOT" && rm -f "$S/onetap-src.zip" && zip -qr "$S/onetap-src.zip" py catalog -x 'py/.venv/*' 'py/.venv-universal/*' 'py/build/*' 'py/dist/*' '*/__pycache__/*' 'py/packaging/OneTap.iconset/*')
   [ -f "$ROOT/target/x86_64-pc-windows-gnu/release/plumesign.exe" ] && (cd "$ROOT" && zip -qj "$S/onetap-plume.zip" target/x86_64-pc-windows-gnu/release/plumesign.exe)
   scp "${SSHO[@]}" -q "$S/onetap-src.zip" "$W:C:/onetap/src.zip"
   [ -f "$S/onetap-plume.zip" ] && scp "${SSHO[@]}" -q "$S/onetap-plume.zip" "$W:C:/onetap/plume.zip"
