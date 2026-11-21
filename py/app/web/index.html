@@ -277,7 +277,7 @@ function renderList(d) {
     S.apps = d.apps.map(a => (a.icon || !icons[a.id]) ? a : { ...a, icon: icons[a.id] }); S.source = d.source;
   }
   const verText = a => a.custom ? "v" + esc(a.version) + " · " + (a.size / 1048576).toFixed(1) + " MB"
-    : a.unsupported ? esc(a.unsupported) : a.version ? "最新 v" + esc(a.version) : (a.has_asset === false ? "暂无安装包" : "读取版本…");
+    : a.unsupported ? esc(a.unsupported) : a.version ? "最新 v" + esc(a.version) : (a.has_asset === false ? "暂无安装包" : a.error ? "版本读取失败，点 ⟳ 刷新重试" : "读取版本…");
   const card = a => `
     <div class="item ${a.id === S.sel ? "on" : ""} ${a.unsupported ? "dis" : ""}" onclick="select('${esc(a.id)}')">
       ${iconHTML(a)}
@@ -487,7 +487,7 @@ function showNotes(appId) {
 function renderDetail() {
   const a = allApps().find(x => x.id === S.sel); if (!a) return;
   const size = a.size ? ` · ${(a.size/1048576).toFixed(1)} MB` : "";
-  const ver = a.version ? `v${esc(a.version)}` : (a.has_asset === false ? "暂无安装包" : "读取版本…");
+  const ver = a.version ? `v${esc(a.version)}` : (a.has_asset === false ? "暂无安装包" : a.error ? `<span title="${esc(a.error)}">版本读取失败（网络不通），点列表上方 ⟳ 刷新重试</span>` : "读取版本…");
   const minos = a.min_ios ? ` · 需要 iOS ${esc(a.min_ios)}+` : "";
   $("detail").innerHTML = `
     <div class="head">${iconHTML(a, true)}
