@@ -33,7 +33,7 @@
       "repo": "",
       "asset_pattern": "DouDuo-*-unsigned.ipa",
       "min_ios": "26.0",
-      "homepage": "https://github.com/WuWeiDuo/DouDuo",
+      "homepage": "https://github.com/81199000/DouDuo",
       "gitee_repo": "remon8/douduo",
       "sources": [
         "https://dl.oneduo.app/douduo/douduo.json",
