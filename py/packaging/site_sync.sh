@@ -26,5 +26,12 @@ if [[ -n $(git -C "$SITE" status --porcelain -- config.js) ]]; then
   git -C "$SITE" add config.js
   git -C "$SITE" commit -qm "release: 官网兜底版本 → 一键签 $VER"
 fi
-"$SITE/deploy.sh" 2>&1 | grep -E "Deployment complete|Success|ERROR|✘" || true
-echo "✅ 官网已发布（一键签 $VER）"
+# 发布失败（网络断、token 过期）以前被 `|| true` 吞掉，照样打印 ✅，要到最后核对才发现官网还是旧版：
+# 没看到 Deployment complete 就重试一次，还不行就报错退出
+for i in 1 2; do
+  OUT=$("$SITE/deploy.sh" 2>&1) || true
+  echo "$OUT" | grep -E "Deployment complete|ERROR|✘" || true
+  echo "$OUT" | grep -q "Deployment complete" && { echo "✅ 官网已发布（一键签 $VER）"; exit 0; }
+  echo "⚠️ 官网发布没成功，${i}/2"; sleep 5
+done
+echo "❌ 官网发布失败（Cloudflare Pages）"; exit 1
