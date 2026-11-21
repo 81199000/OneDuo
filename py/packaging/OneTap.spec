@@ -28,7 +28,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["app.webui", "app.core", "app.sources", "app.certs", "app.autopilot", "app.selfupdate", "app.nasmove"],
+    hiddenimports=["app.webui", "app.core", "app.sources", "app.certs", "app.autopilot", "app.selfupdate", "app.nasmove", "app.nasinstall", "app.nasfind"],
     excludes=["tkinter", "PIL", "app.ui", "app.server"],
     noarchive=False,
 )

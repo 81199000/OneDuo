@@ -520,6 +520,30 @@ class Api:
             log.exception("move to nas failed")
             return {"ok": False, "error": str(e) if isinstance(e, core.SignError) else core.friendly(str(e))}
 
+    def install_to_nas(self, addr, user, password, otp=""):
+        """「装到 NAS」：自动登录群晖 → 装一键签 NAS 版 → 搬手机。进度用 nas_step 推给页面"""
+        from . import nasinstall, nasmove
+
+        def work():
+            try:
+                r = nasinstall.install(addr, user, password, otp or "",
+                                       step=lambda k, t: self.push("nas_step", {"key": k, "text": t}),
+                                       progress=lambda p: self.push("progress", {"step": "nas", "value": p}))
+                self.push("nas_step", {"key": "move", "text": "把手机和 Apple ID 搬过去…"})
+                m = nasmove.move(r["url"])
+                core.set_pref("nas_addr", r["url"])
+                self.push("nas_done", {**r, **m})
+            except nasinstall.NeedOTP as e:
+                self.push("nas_otp", str(e))
+            except Exception as e:  # noqa: BLE001
+                log.exception("install to nas failed")
+                self.push("nas_error", str(e) if isinstance(e, core.SignError) else core.friendly(str(e)))
+        threading.Thread(target=work, daemon=True).start()
+
+    def find_nas(self):
+        from . import nasfind
+        return nasfind.scan()
+
     def nas_addr(self):
         return core.get_pref("nas_addr", "") or ""
 
