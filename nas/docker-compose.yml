@@ -1,8 +1,8 @@
-# 一键签 NAS 版。群晖：Container Manager → 项目 → 新增 → 粘贴本文件 → 完成
+# 一键签 NAS 版（手动安装用）。群晖用户直接在电脑版一键签点「装到 NAS」，全自动，不用这个文件
 # 装好后浏览器打开 http://NAS地址:8686
 services:
   oneduo:
-    image: ghcr.io/wuweiduo/oneduo-nas:latest
+    image: oneduo-nas:0.2.4   # 先导入镜像：dl.oneduo.app/oneduo/nas/v0.2.4/oneduo-nas-0.2.4-<amd64|arm64>.tar.gz
     container_name: oneduo
     network_mode: host          # 必须：要在家里 Wi‑Fi 里找手机（mDNS 广播）
     restart: unless-stopped
