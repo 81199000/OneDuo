@@ -16,7 +16,10 @@ import time
 import webbrowser
 from pathlib import Path
 
-import webview
+try:
+    import webview          # 桌面版才有；NAS（server.py）不装 pywebview
+except ImportError:         # pragma: no cover
+    webview = None
 
 from . import autopilot, certs, selfupdate, sources, core
 
@@ -24,6 +27,10 @@ from . import autopilot, certs, selfupdate, sources, core
 LOG_PATH = (Path.home() / "Library" / "Logs" / "OneTapInstall.log") if sys.platform == "darwin" else core.data_dir() / "OneTapInstall.log"
 logging.basicConfig(filename=LOG_PATH, encoding="utf-8", level=logging.INFO, format="%(asctime)s %(threadName)s %(levelname)s %(message)s")
 log = logging.getLogger("onetap")
+if os.environ.get("ONETAP_LOG_STDOUT"):     # NAS / Docker：日志同时进 docker logs
+    _h = logging.StreamHandler(sys.stdout)
+    _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logging.getLogger().addHandler(_h)
 _fault_file = open(LOG_PATH, "a", encoding="utf-8")
 faulthandler.enable(_fault_file)
 sys.excepthook = lambda t, v, tb: log.critical("uncaught", exc_info=(t, v, tb))
@@ -32,7 +39,7 @@ threading.excepthook = lambda a: log.critical("uncaught in %s", a.thread, exc_in
 
 class Api:
     def __init__(self):
-        self._window: webview.Window | None = None
+        self._window = None   # 桌面版：webview.Window；NAS 版：server.Hub（同样有 evaluate_js 之外的 push 通道）
         self._catalog: core.Catalog | None = None
         self._apps: dict[str, core.AppEntry] = {}
         self._cancel = threading.Event()
@@ -51,6 +58,14 @@ class Api:
     def push(self, event: str, data=None):
         """后台线程 → 界面。日志类消息节流（签名时每秒上百行，全推会把网页桥压垮）；推送失败只记日志不崩"""
         if not self._window:
+            return
+        if hasattr(self._window, "emit"):          # NAS 版：直接推给所有打开的网页（SSE），不走 evaluate_js
+            if event in ("log", "progress"):
+                now = time.monotonic()
+                if now - self._last_push.get(event, 0) < 0.15:
+                    return
+                self._last_push[event] = now
+            self._window.emit(event, data)
             return
         if event in ("log", "progress"):
             now = time.monotonic()
@@ -493,6 +508,20 @@ class Api:
     def set_autostart(self, on):
         core.set_autostart(bool(on))
         return core.autostart_enabled()
+
+    def move_to_nas(self, addr, password=""):
+        """「搬到 NAS」：手机配对记录 + Apple ID 登录状态 + 安装记录 打包传给 NAS 版"""
+        from . import nasmove
+        try:
+            r = nasmove.move(addr, password or "")
+            core.set_pref("nas_addr", addr)
+            return r
+        except Exception as e:  # noqa: BLE001
+            log.exception("move to nas failed")
+            return {"ok": False, "error": str(e) if isinstance(e, core.SignError) else core.friendly(str(e))}
+
+    def nas_addr(self):
+        return core.get_pref("nas_addr", "") or ""
 
     def renew_now(self):
         """「立即全部续签」：把所有记录标记为马上到期，交给后台一轮跑完"""

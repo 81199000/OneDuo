@@ -61,6 +61,8 @@ def resource_dir() -> Path:
 
 def plumesign_path() -> Optional[Path]:
     exe = "plumesign.exe" if sys.platform == "win32" else "plumesign"
+    if os.environ.get("ONETAP_PLUMESIGN") and Path(os.environ["ONETAP_PLUMESIGN"]).exists():   # NAS 版 Docker
+        return Path(os.environ["ONETAP_PLUMESIGN"])
     for p in [
         resource_dir() / "bin" / exe,
         Path(sys.executable).resolve().parent.parent / "Frameworks" / "bin" / exe,   # macOS .app

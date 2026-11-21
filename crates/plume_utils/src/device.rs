@@ -63,7 +63,7 @@ impl Device {
 
     async fn get_name_from_usbmuxd_device(device: &UsbmuxdDevice) -> Result<String, Error> {
         let mut lockdown =
-            LockdownClient::connect(&device.to_provider(UsbmuxdAddr::default(), CONNECTION_LABEL))
+            LockdownClient::connect(&device.to_provider(crate::mux_addr(), CONNECTION_LABEL))
                 .await?;
         let values = lockdown.get_value(None, None).await?;
         Ok(get_dict_string!(values, "DeviceName"))
@@ -142,7 +142,7 @@ impl Device {
             return Err(Error::Other("Device is not connected via USB".to_string()));
         }
 
-        let mut usbmuxd = UsbmuxdConnection::default().await?;
+        let mut usbmuxd = crate::mux_connect().await?;
 
         let provider = self.usbmuxd_device.clone().unwrap().to_provider(
             UsbmuxdAddr::from_env_var().unwrap_or_default(),
@@ -170,12 +170,12 @@ impl Device {
             return Err(Error::Other("Device is not connected via USB".to_string()));
         }
 
-        let mut usbmuxd = UsbmuxdConnection::default().await?;
+        let mut usbmuxd = crate::mux_connect().await?;
         let provider = self
             .usbmuxd_device
             .clone()
             .unwrap()
-            .to_provider(UsbmuxdAddr::default(), HOUSE_ARREST_LABEL);
+            .to_provider(crate::mux_addr(), HOUSE_ARREST_LABEL);
         let mut pairing_file = usbmuxd.get_pair_record(&self.udid).await?;
 
         // saving pairing record requires enabling wifi debugging
@@ -232,7 +232,7 @@ impl Device {
             .usbmuxd_device
             .clone()
             .unwrap()
-            .to_provider(UsbmuxdAddr::default(), HOUSE_ARREST_LABEL);
+            .to_provider(crate::mux_addr(), HOUSE_ARREST_LABEL);
 
         let pairing_file = self.get_rsd_pairing_file(&provider, path_to_store).await?;
 
@@ -396,8 +396,8 @@ pub async fn wifi_sync(device_id: &str, on: Option<bool>) -> Result<bool, Error>
         .usbmuxd_device
         .clone()
         .ok_or_else(|| Error::Other("Device is not connected".to_string()))?;
-    let provider = u.to_provider(UsbmuxdAddr::default(), HOUSE_ARREST_LABEL);
-    let mut usbmuxd = UsbmuxdConnection::default().await?;
+    let provider = u.to_provider(crate::mux_addr(), HOUSE_ARREST_LABEL);
+    let mut usbmuxd = crate::mux_connect().await?;
     let pairing_file = usbmuxd.get_pair_record(&dev.udid).await?;
     let mut lc = LockdownClient::connect(&provider).await?;
     lc.start_session(&pairing_file).await?;
@@ -418,7 +418,7 @@ pub async fn wifi_sync(device_id: &str, on: Option<bool>) -> Result<bool, Error>
 }
 
 pub async fn get_device_for_id(device_id: &str) -> Result<Device, Error> {
-    let mut usbmuxd = UsbmuxdConnection::default().await?;
+    let mut usbmuxd = crate::mux_connect().await?;
     // 一键装：上游只比 usbmuxd 的连接序号（device_id），传 UDID 永远找不到；两种都认，USB 优先于 Wi‑Fi
     let mut devices = usbmuxd.get_devices().await?;
     devices.sort_by_key(|d| !matches!(d.connection_type, idevice::usbmuxd::Connection::Usb));
