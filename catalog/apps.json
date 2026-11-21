@@ -2,8 +2,8 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.2.2",
-    "notes": "新增：查看软件源新版本更新了什么——App 详情里显示最新版的更新摘要，点开看完整说明；「我的手机」里有新版时可以点「看更新内容」\n新增：一键签官网 oneduo.app 上线\n优化：Gitee 不通时自动换用 Cloudflare R2（dl.oneduo.app）下载应用列表、软件源和安装包",
+    "latest": "0.2.3",
+    "notes": "修正：Apple ID 被苹果锁定时，不再误报成「手机锁着屏」，会直接提示去 iforgot.apple.com 解锁；手机真锁屏时照常提示解锁。",
     "download": {
       "gitee": "https://oneduo.app/#download",
       "github": "https://oneduo.app/#download",
@@ -11,14 +11,14 @@
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.2.2-macos-universal.zip",
-        "size": 29766496,
-        "sha256": "08eeb0d8f46c6d614e155971ca1e08cc1830ed9b7ad9877a53c90a8dc023b933"
+        "name": "OneDuo-0.2.3-macos-universal.zip",
+        "size": 29766505,
+        "sha256": "a4aad847f12dc5fdcc37c2bc3706cccba21d651f761b920ac5a8008f5236467a"
       },
       "windows": {
-        "name": "OneDuo-0.2.2-windows-x64-setup.exe",
-        "size": 49750803,
-        "sha256": "803a4de6dbe396e18175d70327025e4cd92b7ffcb9761b15160eb21bb445bc33"
+        "name": "OneDuo-0.2.3-windows-x64-setup.exe",
+        "size": 49751606,
+        "sha256": "0741514fda6fc8cde100017bb6df18780383aedc530d0979a0787eeb4dd8b0e5"
       }
     }
   },
