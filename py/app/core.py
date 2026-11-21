@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import logging
 import os
 import platform
 import re
@@ -405,7 +406,8 @@ def download_ipa(app: AppEntry, progress: Callable[[float], None], cancel: threa
         reqs.append(urllib.request.Request(u, headers={"User-Agent": UA}))
     tmp = out.with_suffix(".part")
     errors = []
-    for req in reqs:                     # 一个镜像不通就换下一个
+    # 一个镜像不通就换下一个；同一个镜像中途断流（大小不对 / 超时 / 连接被重置）最多再试 2 次——CDN 慢的时候常见
+    for req in [r for r in reqs for _ in range(3)]:
         try:
             with urlopen(req, timeout=30) as r, open(tmp, "wb") as f:
                 total = int(r.headers.get("Content-Length") or app.asset_size or 0)
@@ -429,7 +431,8 @@ def download_ipa(app: AppEntry, progress: Callable[[float], None], cancel: threa
             raise
         except Exception as e:  # noqa: BLE001
             errors.append(f"{req.full_url.split('/')[2]}：{e}")
-    raise RuntimeError("下载失败：" + "；".join(errors))
+            logging.getLogger("onetap").warning("download %s failed (%d): %s", req.full_url, len(errors), e)
+    raise RuntimeError("下载失败：" + "；".join(dict.fromkeys(errors)))
 
 
 # MARK: 手机
