@@ -438,10 +438,14 @@ _FRIENDLY = [
     (r"PROV_BAD_FORMAT|ProvisioningEntitlementsUnknown", "描述文件（.mobileprovision）读不出来，确认文件没损坏"),
     (r"ApplicationVerificationFailed|0xe8008015|A valid provisioning profile", "手机拒绝安装：描述文件不包含这台手机，或者证书已被苹果吊销（掉签）"),
     (r"0xe800801c|no longer valid|revoked", "证书已被苹果吊销（掉签），换一个证书"),
+    # 苹果返回 -20209「This Apple ID has been locked for security reasons」：是账号被锁，不是手机锁屏（工单 B10）
+    (r"-20209|Apple ID has been (locked|disabled)|account (is |has been )?(locked|disabled)",
+     "Apple ID 被苹果锁定了（安全原因），去 iforgot.apple.com 解锁或改密码后再登录"),
     (r"Incorrect|-20101|invalid.*credentials|password", "Apple ID 或密码不对"),
     (r"maximum number of apps|limit.*app ids|-7.*7.?day", "免费 Apple ID 7 天内最多注册 10 个 App ID，过几天再装或换个 Apple ID"),
     (r"3 apps|maximum.*installed|too many", "免费 Apple ID 同时最多装 3 个自签 App，先删掉一个再装"),
-    (r"locked|PasswordProtected", "手机锁着屏，请解锁后保持亮屏"),
+    # 只认 idevice 的设备锁屏错误（"device locked" / "device is locked" / DeviceLocked / PasswordProtected）
+    (r"device (is )?locked|DeviceLocked|PasswordProtected", "手机锁着屏，请解锁后保持亮屏"),
     (r"Developer Mode|developer mode", "手机没打开开发者模式（设置 → 隐私与安全性 → 开发者模式）"),
     (r"pair|Trust|trust", "手机还没信任这台电脑：在手机上点「信任」并输入锁屏密码"),
     (r"No devices connected", "没找到手机：请用数据线连接，并解锁手机"),
