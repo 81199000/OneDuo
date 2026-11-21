@@ -16,7 +16,7 @@ ENV TZ=Asia/Shanghai \
     ONETAP_PORT=8686
 
 WORKDIR /opt/oneduo
-COPY bin/plumesign bin/netmuxd /opt/oneduo/bin/
+COPY bin/ /opt/oneduo/bin/
 COPY py/app /opt/oneduo/app
 COPY catalog /opt/oneduo/catalog
 COPY nas/entrypoint.sh /opt/oneduo/entrypoint.sh

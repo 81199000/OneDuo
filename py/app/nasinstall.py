@@ -98,7 +98,12 @@ class Synology:
 
     def call(self, api: str, method: str, version: int = 1, timeout: float = 60, **params):
         q = {"api": api, "method": method, "version": str(version)}
-        body = {k: (json.dumps(v) if isinstance(v, (dict, list, bool)) else str(v)) for k, v in params.items()}
+        # 群晖新接口（SYNO.Docker.*）和网页界面一样，参数一律 JSON 编码（字符串也要带引号，否则 2104 参数错）；
+        # 老接口（FileStation 等）收原样字符串
+        if api.startswith("SYNO.Docker."):
+            body = {k: json.dumps(v) for k, v in params.items()}
+        else:
+            body = {k: (json.dumps(v) if isinstance(v, (dict, list, bool)) else str(v)) for k, v in params.items()}
         hdr = {"Content-Type": "application/x-www-form-urlencoded"}
         if self.syno_token:
             hdr["X-SYNO-TOKEN"] = self.syno_token
@@ -157,6 +162,20 @@ class Synology:
             return (r.get("data") or {}).get("model", "")
         except Exception:  # noqa: BLE001
             return ""
+
+    def arch(self) -> str:
+        """amd64 / arm64：按 CPU 厂商判断（群晖 x86 是 Intel / AMD，ARM 是 Realtek / Marvell / Annapurna 等）"""
+        try:
+            r = self.call("SYNO.Core.System", "info", 1)
+            d = r.get("data") or {}
+            v = " ".join(str(d.get(k, "")) for k in ("cpu_vendor", "cpu_family", "cpu_series")).lower()
+            if any(k in v for k in ("intel", "amd", "x86")):
+                return "amd64"
+            if v.strip():
+                return "arm64"
+        except Exception:  # noqa: BLE001
+            pass
+        return "amd64"
 
     def check_docker(self) -> None:
         if "SYNO.Docker.Project" not in self.apis:
@@ -244,12 +263,63 @@ def _pick_share(nas: Synology) -> str:
     raise core.SignError("NAS 上没有共享文件夹：先在「控制面板 → 共享文件夹」建一个叫 docker 的")
 
 
-def image_file(progress: Callable[[float], None]) -> tuple[Path, str]:
-    """NAS 版镜像（docker save 出来的 tar）。先看本地缓存，没有就从 dl.oneduo.app 下载。返回 (路径, 镜像名:版本)"""
+NAS_MANIFEST = f"{core.R2_BASE}/oneduo/nas/latest.json"
+# latest.json：{"version": "0.2.5", "images": {"amd64": {"name": "oneduo-nas-0.2.5-amd64.tar.gz", "size": …, "sha256": …}, "arm64": {…}}}
+
+
+def image_file(arch: str, progress: Callable[[float], None]) -> tuple[Path, str]:
+    """NAS 版镜像（docker save + gzip）。先看本地缓存，没有就从 dl.oneduo.app 下载并校验。返回 (路径, 镜像名:版本)"""
     local = os.environ.get("ONETAP_NAS_IMAGE")      # 开发测试：直接用本地打好的 tar
     if local:
         return Path(local), os.environ.get("ONETAP_NAS_IMAGE_TAG", f"{IMAGE_REPO}:latest")
-    raise core.SignError("NAS 版镜像还没发布")
+    import hashlib
+    try:
+        man = json.loads(core.http_get(NAS_MANIFEST, timeout=15))
+    except Exception as e:  # noqa: BLE001
+        raise core.SignError(f"读不到 NAS 版的版本信息，检查电脑网络（{str(e)[:80]}）")
+    ver = man["version"]
+    img = (man.get("images") or {}).get(arch)
+    if not img:
+        raise core.SignError(f"NAS 版暂时不支持这台 NAS 的处理器（{arch}）")
+    d = core.data_dir() / "nas"
+    d.mkdir(parents=True, exist_ok=True)
+    dest = d / img["name"]
+
+    def sha(p: Path) -> str:
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for b in iter(lambda: f.read(1 << 20), b""):
+                h.update(b)
+        return h.hexdigest()
+
+    if not (dest.exists() and dest.stat().st_size == img["size"] and sha(dest) == img["sha256"]):
+        for old in d.glob("oneduo-nas-*"):
+            old.unlink(missing_ok=True)
+        url = f"{core.R2_BASE}/oneduo/nas/v{ver}/{img['name']}"
+        tmp = dest.with_suffix(".part")
+        last = None
+        for _ in range(3):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": core.UA})
+                with core.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+                    got = 0
+                    while True:
+                        b = r.read(1 << 18)
+                        if not b:
+                            break
+                        f.write(b)
+                        got += len(b)
+                        progress(min(got / img["size"], 0.999) * 0.5)    # 下载占进度条前一半，上传后一半
+                if tmp.stat().st_size != img["size"] or sha(tmp) != img["sha256"]:
+                    raise IOError("文件不完整")
+                tmp.replace(dest)
+                break
+            except Exception as e:  # noqa: BLE001
+                last = e
+                tmp.unlink(missing_ok=True)
+        else:
+            raise core.SignError(f"下载 NAS 版失败：{last}")
+    return dest, f"{IMAGE_REPO}:{ver}"
 
 
 def install(addr: str, user: str, password: str, otp: str = "",
@@ -271,17 +341,18 @@ def install(addr: str, user: str, password: str, otp: str = "",
         nas.check_docker()
         share = _pick_share(nas)
         proj_dir = f"{share}/{PROJECT}"
-        step("image", "准备安装包…")
-        tar, tag = image_file(progress)
-        step("upload", "上传到 NAS…")
+        arch = nas.arch()
+        step("upload", "下载并上传一键签 NAS 版…")
+        tar, tag = image_file(arch, progress)
         nas.mkdir(share, PROJECT)
         nas.mkdir(proj_dir, "data")         # 群晖不会自动建 bind mount 的目录，没有就 Bind mount failed
-        nas.upload(proj_dir, "oneduo-nas.tar", tar, progress)
+        up_name = "oneduo-nas.tar.gz" if tar.name.endswith(".gz") else "oneduo-nas.tar"
+        nas.upload(proj_dir, up_name, tar, lambda p: progress(0.5 + p * 0.5) if not os.environ.get("ONETAP_NAS_IMAGE") else progress(p))
         step("import", "导入…")
-        r = nas.call("SYNO.Docker.Image", "import", 1, timeout=600, path=f"{proj_dir}/oneduo-nas.tar")
+        r = nas.call("SYNO.Docker.Image", "import", 1, timeout=600, path=f"{proj_dir}/{up_name}")
         if not r.get("success"):
             raise core.SignError(f"导入镜像失败（错误码 {(r.get('error') or {}).get('code')}）")
-        nas.delete_file(f"{proj_dir}/oneduo-nas.tar")
+        nas.delete_file(f"{proj_dir}/{up_name}")
         step("project", "创建并启动…")
         existing = {p.get("name"): pid for pid, p in nas.projects().items()}
         content = COMPOSE.format(image=tag, port=APP_PORT)
