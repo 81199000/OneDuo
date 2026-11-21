@@ -25,3 +25,5 @@ py/packaging/drivers/
 /nas/bin/
 /nas/.ctx/
 /target-linux-*/
+/dist/nas/
+/nas/.ctx-*/
