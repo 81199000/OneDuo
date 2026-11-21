@@ -40,6 +40,7 @@ def token():
 
 
 TOK = token()
+MISSING = []   # 本轮 R2 缺、本机也没有的包
 # 发版脚本刚打好的包在这些目录：先找本机同名同大小的文件，省掉从 Gitee 再下一遍
 LOCAL_DIRS = [pathlib.Path(p).expanduser() for p in
               os.environ.get("ONEDUO_LOCAL_IPA_DIRS", "~/Projects/douduo/build:~/Projects/hongguo/build").split(":")]
@@ -99,23 +100,27 @@ def get(url, timeout=60):
 
 
 def put_file_if_needed(key, src_url=None, path=None, size=0):
-    """大小一致就跳过；没有就从本地文件或 Gitee 下载后上传"""
+    """R2 上已有同大小的文件就跳过；否则只传本机文件。
+    不再「从 Gitee 下载下来再传 R2」（老板 11-21：上传完不该再下载再上传）——本机没有包就报出来，
+    在打包那台机器上补传：r2_sync.py --put <key> <本机文件>。"""
     have = remote_size(key)
     want = path.stat().st_size if path else size
     if have >= 0 and (not want or have == want):
         print(f"  = {key}（已存在）")
-        return
-    if path:
-        return put_path(key, path, "application/octet-stream", "public, max-age=31536000, immutable")
-    local = next((d / src_url.rsplit("/", 1)[-1] for d in LOCAL_DIRS if src_url and (d / src_url.rsplit("/", 1)[-1]).is_file()), None)
-    if local and (not size or local.stat().st_size == size):
-        print(f"  ⇢ 用本机 {local}")
-        return put_path(key, local, "application/octet-stream", "public, max-age=31536000, immutable")
-    print(f"  ↓ {src_url}")
-    data = get(src_url, timeout=600)
-    if size and len(data) != size:
-        raise SystemExit(f"下载大小不对：{src_url} {len(data)} ≠ {size}")
-    put(key, data, "application/octet-stream", "public, max-age=31536000, immutable")
+        return True
+    if not path and src_url:
+        name = src_url.rsplit("/", 1)[-1]
+        path = next((d / name for d in LOCAL_DIRS if (d / name).is_file()
+                     and (not size or (d / name).stat().st_size == size)), None)
+    if not path:
+        print(f"  ✗ {key}：R2 上没有，本机也没有这个包（{src_url or ''}），跳过")
+        MISSING.append(key)
+        return False
+    put_path(key, path, "application/octet-stream", "public, max-age=31536000, immutable")
+    got = remote_size(key)   # 传完只读响应头核对大小，不下载
+    if got != path.stat().st_size:
+        raise SystemExit(f"上传后核对失败：{key} R2 上 {got} ≠ 本机 {path.stat().st_size}")
+    return True
 
 
 def sync_catalog():
@@ -154,8 +159,9 @@ def sync_app(app):
                 continue
             name = url.rsplit("/", 1)[-1]
             key = f"{aid}/v{ver}/{name}"
-            put_file_if_needed(key, src_url=url, size=int(v.get("size") or a.get("size") or 0))
-            v["downloadURL"] = f"{PUBLIC}/{key}"
+            if put_file_if_needed(key, src_url=url, size=int(v.get("size") or a.get("size") or 0)):
+                v["downloadURL"] = f"{PUBLIC}/{key}"
+            # 缺包的版本保留原 Gitee 下载地址，不会变成 404
     j["sourceURL"] = f"{PUBLIC}/{aid}/{aid}.json"
     if j.get("name") and "R2" not in j["name"]:
         j["name"] = j["name"].replace("（国内）", "") + "（备用）"
@@ -188,6 +194,8 @@ def main():
             else:
                 put_file_if_needed(key, src_url=f"https://gitee.com/remon8/oneduo/releases/download/v{ver}/{a['name']}",
                                    size=int(a.get("size") or 0))
+    if MISSING:
+        print(f"⚠️ 有 {len(MISSING)} 个包 R2 上没有、本机也没有，源里这些版本仍指向 Gitee：{', '.join(MISSING)}")
     print("✅ R2 同步完成")
 
 
