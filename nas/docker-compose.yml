@@ -1,0 +1,13 @@
+# 一键签 NAS 版。群晖：Container Manager → 项目 → 新增 → 粘贴本文件 → 完成
+# 装好后浏览器打开 http://NAS地址:8686
+services:
+  oneduo:
+    image: ghcr.io/wuweiduo/oneduo-nas:latest
+    container_name: oneduo
+    network_mode: host          # 必须：要在家里 Wi‑Fi 里找手机（mDNS 广播）
+    restart: unless-stopped
+    volumes:
+      - ./data:/data            # 手机配对、Apple ID 登录、安装记录都在这，删容器也不丢
+    environment:
+      - ONETAP_PORT=8686
+      # - ONETAP_PASSWORD=改成你的密码   # 端口映射到外网时一定要设

@@ -28,8 +28,8 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["app.webui", "app.core", "app.sources", "app.certs", "app.autopilot", "app.selfupdate"],
-    excludes=["tkinter", "PIL", "app.ui"],
+    hiddenimports=["app.webui", "app.core", "app.sources", "app.certs", "app.autopilot", "app.selfupdate", "app.nasmove"],
+    excludes=["tkinter", "PIL", "app.ui", "app.server"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

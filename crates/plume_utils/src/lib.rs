@@ -95,3 +95,13 @@ pub async fn copy_dir_recursively(src: &Path, dst: &Path) -> Result<(), Error> {
 
     Ok(())
 }
+
+/// 一键签：usbmuxd 地址。设了 USBMUXD_SOCKET_ADDRESS（unix socket 路径或 IP:端口）就用它——
+/// NAS / Docker 里 netmuxd 不一定占 /var/run/usbmuxd；没设就是系统默认（Mac /var/run/usbmuxd，Windows 127.0.0.1:27015）
+pub fn mux_addr() -> idevice::usbmuxd::UsbmuxdAddr {
+    idevice::usbmuxd::UsbmuxdAddr::from_env_var().unwrap_or_default()
+}
+
+pub async fn mux_connect() -> Result<idevice::usbmuxd::UsbmuxdConnection, idevice::IdeviceError> {
+    mux_addr().connect(0).await
+}

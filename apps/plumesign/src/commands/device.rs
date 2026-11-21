@@ -62,7 +62,7 @@ pub async fn execute(args: DeviceArgs) -> Result<()> {
         return Ok(());
     }
     if args.list {
-        let mut muxer = UsbmuxdConnection::default().await?;
+        let mut muxer = plume_utils::mux_connect().await?;
         let devices = muxer.get_devices().await?;
         for d in futures::future::join_all(devices.into_iter().map(Device::new)).await {
             // macOS usbmuxd 给的 Wi‑Fi 地址是 IPv6 链路本地（fe80::），idevice 能连但会归成 Unknown("Network 1E")
@@ -148,7 +148,7 @@ pub async fn select_device(device_udid: Option<String>) -> Result<Device> {
         return Ok(get_device_for_id(&udid).await?);
     }
 
-    let mut muxer = UsbmuxdConnection::default().await?;
+    let mut muxer = plume_utils::mux_connect().await?;
     let devices = muxer.get_devices().await?;
 
     if devices.is_empty() {

@@ -22,3 +22,6 @@ py/dist/
 py/packaging/OneTap.iconset/
 py/packaging/drivers/
 .venv-universal/
+/nas/bin/
+/nas/.ctx/
+/target-linux-*/
