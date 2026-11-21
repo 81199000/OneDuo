@@ -78,6 +78,37 @@ def _token() -> Optional[str]:
     return os.environ.get("ONETAP_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
 
 
+_ssl_ctx = None
+
+
+def ssl_context():
+    """HTTPS 根证书。打包后的 Mac 版 OpenSSL 只认 python.org 安装目录下的 cert.pem，
+    用户电脑上没有这个文件 → 所有 HTTPS 都报 CERTIFICATE_VERIFY_FAILED（Gitee / R2 全挂，
+    列表一直「读取版本…」）。这里补上系统自带的证书包和随包的 certifi（工单 B15）"""
+    global _ssl_ctx
+    if _ssl_ctx is None:
+        import ssl
+        ctx = ssl.create_default_context()        # Windows 会读系统证书库
+        extra = ["/etc/ssl/cert.pem"] if sys.platform == "darwin" else []
+        try:
+            import certifi
+            extra.append(certifi.where())
+        except Exception:  # noqa: BLE001
+            pass
+        for p in extra:
+            try:
+                if os.path.exists(p):
+                    ctx.load_verify_locations(cafile=p)
+            except Exception:  # noqa: BLE001
+                pass
+        _ssl_ctx = ctx
+    return _ssl_ctx
+
+
+def urlopen(req, timeout: float):
+    return urllib.request.urlopen(req, timeout=timeout, context=ssl_context())
+
+
 def http_get(url: str, timeout: float = 15, accept: Optional[str] = None) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     if accept:
@@ -85,7 +116,7 @@ def http_get(url: str, timeout: float = 15, accept: Optional[str] = None) -> byt
     tok = _token()
     if tok and ("api.github.com" in url or "githubusercontent.com" in url):
         req.add_header("Authorization", f"Bearer {tok}")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urlopen(req, timeout=timeout) as r:
         return r.read()
 
 
@@ -115,6 +146,7 @@ class AppEntry:
     asset_urls: list = field(default_factory=list)   # 同一版本的几个下载镜像，按优先级
     latest_notes: str = ""                   # 最新版本更新了什么（软件源 versionDescription）
     latest_date: str = ""                    # 最新版本发布日期（软件源 versionDate / date）
+    resolve_error: str = ""                  # 读版本失败的原因（界面显示「读取失败」而不是一直「读取版本…」）
     installed_version: Optional[str] = None
     icon_bytes: Optional[bytes] = None
     # 用户自己加的本地 IPA（不走下载）
@@ -348,6 +380,13 @@ def resolve_latest(app: AppEntry) -> None:
 
 
 def download_ipa(app: AppEntry, progress: Callable[[float], None], cancel: threading.Event) -> Path:
+    if not app.asset_url and app.sources and not app.local_path:
+        try:                             # 打开时版本没读到（网络 / 证书问题）：装之前再试一次
+            resolve_latest(app)
+            app.resolve_error = ""
+        except Exception as e:  # noqa: BLE001
+            app.resolve_error = str(e)
+            raise RuntimeError(f"{app.name} 读取版本失败，请检查网络后点「⟳ 刷新」重试（{str(e)[:120]}）") from None
     if not app.asset_url:
         raise RuntimeError(f"{app.name} 还没有可下载的安装包")
     out = data_dir() / "downloads" / f"{app.id}-{app.latest_version}.ipa"
@@ -366,7 +405,7 @@ def download_ipa(app: AppEntry, progress: Callable[[float], None], cancel: threa
     errors = []
     for req in reqs:                     # 一个镜像不通就换下一个
         try:
-            with urllib.request.urlopen(req, timeout=30) as r, open(tmp, "wb") as f:
+            with urlopen(req, timeout=30) as r, open(tmp, "wb") as f:
                 total = int(r.headers.get("Content-Length") or app.asset_size or 0)
                 got = 0
                 while True:
