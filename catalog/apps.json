@@ -2,8 +2,8 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.2.3",
-    "notes": "修正：Apple ID 被苹果锁定时，不再误报成「手机锁着屏」，会直接提示去 iforgot.apple.com 解锁；手机真锁屏时照常提示解锁。",
+    "latest": "0.2.4",
+    "notes": "修正：Mac 版在没装 Python 的电脑上连不上下载源、一直卡在「读取版本」的问题；安装失败时不再一律提示「请信任手机」，会显示真正的原因；读不到版本时会提示，点安装前也会自动重试。",
     "download": {
       "gitee": "https://oneduo.app/#download",
       "github": "https://oneduo.app/#download",
@@ -11,14 +11,14 @@
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.2.3-macos-universal.zip",
-        "size": 29766505,
-        "sha256": "a4aad847f12dc5fdcc37c2bc3706cccba21d651f761b920ac5a8008f5236467a"
+        "name": "OneDuo-0.2.4-macos-universal.zip",
+        "size": 29899989,
+        "sha256": "4ba51e0a4467b5411974da75f7aca9b76cf4ffff00b4570c02541fbedee095ea"
       },
       "windows": {
-        "name": "OneDuo-0.2.3-windows-x64-setup.exe",
-        "size": 49751606,
-        "sha256": "0741514fda6fc8cde100017bb6df18780383aedc530d0979a0787eeb4dd8b0e5"
+        "name": "OneDuo-0.2.4-windows-x64-setup.exe",
+        "size": 49875828,
+        "sha256": "9cc9c1551f76a1dad06998fda9f709d2f406068fd691cb302424e908af96b434"
       }
     }
   },
