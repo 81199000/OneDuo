@@ -136,6 +136,39 @@
 - 描述文件绑定的是 **通配符（*）** 才能签任意 App；只绑定了某一个 App 的，只能签那一个。
 - 证书被苹果吊销（掉签）后 App 会打不开，这是证书本身的问题，换一张证书重装即可。证书和密码只保存在你自己的电脑上。
 
+### 12. 装到 NAS（电脑关机也能自动续签）
+
+家里有 NAS 的话，可以把一键签装到 NAS 上。NAS 24 小时开着，手机回家连上 Wi‑Fi 就自动续签、自动更新，电脑可以关机。
+
+1. 手机用数据线连电脑、解锁。打开一键签 →「我的手机」→ 最下面 **装到 NAS**。
+
+   ![装到 NAS](docs/tutorial/14-nas-entry.png)
+
+2. 一键签会自动找到家里的群晖（找不到就手动填 NAS 的 IP）。填 **NAS 的管理员账号和密码**，点 **开始安装**。开了两步验证的会再让你输验证码。
+
+   ![填 NAS 账号](docs/tutorial/15-nas-login.png)
+
+3. 等 1–2 分钟。一键签会自动：下载 NAS 版（约 57 MB，自动选 x86 / ARM）→ 传给 NAS → 在 Container Manager 里建 `oneduo` 项目并启动 → 把手机配对、Apple ID 登录、已装的 App 记录一起搬过去。NAS 不需要连 Docker Hub。
+
+   ![自动安装中](docs/tutorial/16-nas-installing.png)
+
+4. 装好后会自动打开 `http://NAS地址:8686`。以后在电脑或手机的浏览器里打开这个地址，装 App、看续签都在这里，界面和电脑版一样。
+
+说明：
+
+- **账号密码只用来这一次自动安装**，不保存。NAS 版只在家里局域网用；要映射到外网，在 Container Manager 里给 oneduo 加环境变量 `ONETAP_PASSWORD=你的密码`。
+- 再点一次「装到 NAS」→「升级 / 重装」就是升级到最新版，数据保留。
+- 需要 NAS 支持 Container Manager（Docker）。入门款（如部分 j / play 系列）不支持就装不了，继续用电脑版即可。
+- 第一次必须用数据线连电脑：苹果要求手机先「信任」一台设备，这一步绕不开。之后就不用线了。
+
+> **⚠️ 目前只在群晖（DS923+，DSM 7.4）上实测过。** 飞牛、威联通、绿联、极空间、Unraid 等其他 NAS 还没有测，「装到 NAS」的全自动安装也只支持群晖。
+>
+> 其他 NAS 可以手动装：下载 [`dl.oneduo.app/oneduo/nas/`](https://dl.oneduo.app/oneduo/nas/latest.json) 里对应架构的镜像，`docker load -i oneduo-nas-<版本>-<amd64|arm64>.tar.gz`，再用 [`nas/docker-compose.yml`](nas/docker-compose.yml) 启动（必须 `network_mode: host`），然后在电脑版点「装到 NAS」选这台 NAS 搬手机。
+>
+> **装不了？** 一键签是开源的。
+> - 到 **抖音搜「一键签」** 给我们留言反馈：NAS 品牌型号、系统版本、卡在哪一步、报错截图。
+> - 也可以让 AI 编程助手（Claude Code、Codex、Cursor 等）读本仓库的 [`nas/README.md`](nas/README.md) 和 [`py/app/nasinstall.py`](py/app/nasinstall.py)，按你的 NAS 改好后自己编译安装。改通了欢迎提 PR，让更多人能用。
+
 ## 常见问题
 
 **App 打开就闪退**

@@ -80,7 +80,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .note { color: var(--dim); font-size: 12.5px; }
   .bar { height: 4px; background: #2a2b30; border-radius: 2px; overflow: hidden; margin: 14px 0 0; display: none; }
-  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .bar > * { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .msg { margin-top: 14px; font-size: 13.5px; white-space: pre-line; min-height: 22px; color: var(--sub); }
   .msg.err { color: var(--accent); } .msg.ok { color: var(--ok); }
   .actions { margin-top: auto; display: flex; justify-content: flex-end; padding-top: 16px; }
@@ -416,7 +416,7 @@ async function openMove() {
   if (!list.length) { $("nasPick").innerHTML = '<div class="dim" style="font-size:13px">没自动找到，手动填 NAS 的 IP 地址</div>'; return; }
   $("nasPick").innerHTML = list.map(n => `<div class="srow" style="cursor:pointer" onclick="pickNas('${n.host}', ${!!n.installed && n.kind !== "synology" ? 1 : 0}, ${n.installed ? 1 : 0})">
     <span class="radio"></span><div class="t"><h4>${esc(n.name)} <span class="m" style="display:inline">${esc(n.host)}</span></h4>
-    <div class="m">${n.installed ? "已经装了一键签 NAS 版，点「开始」直接搬手机" : n.docker === false ? "没装 Container Manager：先去套件中心装上" : "可以自动安装"}</div></div></div>`).join("");
+    <div class="m">${n.installed ? "已经装了一键签 NAS 版，点「开始搬」把手机搬过去" + (n.kind === "synology" ? `<span class=\"link\" style=\"margin-left:8px\" onclick=\"event.stopPropagation();pickNas('${n.host}',0,0)\">升级 / 重装</span>` : "") : n.docker === false ? "没装 Container Manager：先去套件中心装上" : "可以自动安装"}</div></div></div>`).join("");
   pickNas(list[0].host, list[0].kind === "oneduo" ? 1 : 0, list[0].installed ? 1 : 0);
 }
 function pickNas(host, onlyMove, installed) {
