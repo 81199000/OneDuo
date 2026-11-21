@@ -2,11 +2,14 @@
 
 群晖 / 威联通 / 任何 x86_64 Linux + Docker。NAS 24 小时开着，免费 Apple ID 签的 App 每 7 天自动续签，电脑关机也不影响。
 
-## 用户怎么装（3 步）
+## 用户怎么装
 
-1. **群晖 Container Manager → 项目 → 新增**，路径选一个文件夹（如 `/docker/oneduo`），来源选「创建 docker-compose.yml」，粘贴 `docker-compose.yml` 全文 → 下一步 → 完成。
-2. 电脑上打开一键签 →「我的手机」→「**搬到 NAS**」→ 填 NAS 地址 → 开始搬（手机先用数据线连着电脑、解锁）。
-3. 浏览器打开 `http://NAS地址:8686`，以后都在这里装 App、看续签。手机能用浏览器打开同一个地址。
+**群晖（全自动）**：手机用数据线连电脑、解锁 → 电脑版一键签 →「我的手机」→「**装到 NAS**」→ 自动找到 NAS → 填 NAS 管理员账号密码 → 开始安装。
+电脑会从 dl.oneduo.app 下载 NAS 版（约 57 MB，自动选 x86 / ARM）、传给 NAS、在 Container Manager 里建 `oneduo` 项目并启动，再把手机和 Apple ID 搬过去。约 1–2 分钟，NAS 不用连 Docker Hub。
+装好后浏览器打开 `http://NAS地址:8686`。再点一次「装到 NAS」= 升级到最新版，数据保留。
+
+**其他 NAS（手动）**：Docker / Compose 里新建项目，粘贴 `docker-compose.yml`（镜像先 `docker load -i oneduo-nas-<版本>-<arch>.tar.gz`），
+然后电脑版点「装到 NAS」→ 选这台 NAS（显示「已经装了一键签 NAS 版」）→ 开始搬。
 
 ## 原理
 
@@ -23,7 +26,9 @@ docker run --rm --platform linux/amd64 -v $PWD:/src rust:1-alpine sh -c \
    OPENSSL_STATIC=1 CARGO_TARGET_DIR=/src/target-linux-x86_64 cargo build --release -p plumesign'
 mkdir -p nas/bin && cp target-linux-x86_64/release/plumesign nas/bin/
 # netmuxd：github.com/jkcoxson/netmuxd 同样在 rust:1-alpine 里 cargo build --release，产物放 nas/bin/netmuxd
-./nas/build.sh        # → oneduo-nas:<版本>
+# 放到 nas/bin/amd64/、nas/bin/arm64/（arm64 在 Apple 芯片 Mac 上用 --platform linux/arm64 原生编）
+./nas/build.sh        # → dist/nas/oneduo-nas-<版本>-{amd64,arm64}.tar.gz
+./nas/release.sh      # → dl.oneduo.app/oneduo/nas/（最后写 latest.json，电脑版据此下载）
 ```
 
 ## 环境变量
