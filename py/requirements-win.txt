@@ -3,3 +3,4 @@ typing_extensions==4.16.0
 bottle==0.13.4
 proxy_tools==0.1.0
 pythonnet
+certifi==2026.05.20

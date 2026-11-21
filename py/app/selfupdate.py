@@ -75,7 +75,7 @@ def download(ver: str, asset: dict, progress: Callable[[float], None]) -> Path:
         try:
             log.info("download %s", url)
             req = urllib.request.Request(url, headers={"User-Agent": core.UA})
-            with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+            with core.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
                 total = int(r.headers.get("Content-Length") or want_size or 0)
                 got = 0
                 while True:
