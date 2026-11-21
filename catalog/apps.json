@@ -2,8 +2,8 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.2.4",
-    "notes": "修正：Mac 版在没装 Python 的电脑上连不上下载源、一直卡在「读取版本」的问题；安装失败时不再一律提示「请信任手机」，会显示真正的原因；读不到版本时会提示，点安装前也会自动重试。",
+    "latest": "0.2.5",
+    "notes": "新功能：装到 NAS。在「我的手机」最下面点「装到 NAS」，自动找到家里的群晖，填 NAS 账号密码就自动装好一键签 NAS 版，手机和 Apple ID 一起搬过去。NAS 24 小时开着，电脑关机也能自动续签。目前只在群晖上实测过。",
     "download": {
       "gitee": "https://oneduo.app/#download",
       "github": "https://oneduo.app/#download",
@@ -11,14 +11,14 @@
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.2.4-macos-universal.zip",
-        "size": 29899989,
-        "sha256": "4ba51e0a4467b5411974da75f7aca9b76cf4ffff00b4570c02541fbedee095ea"
+        "name": "OneDuo-0.2.5-macos-universal.zip",
+        "size": 29932845,
+        "sha256": "d1b406149c0c982be802d940041e8ca34ae1aa186b92014db116dad5b481badf"
       },
       "windows": {
-        "name": "OneDuo-0.2.4-windows-x64-setup.exe",
-        "size": 49875828,
-        "sha256": "9cc9c1551f76a1dad06998fda9f709d2f406068fd691cb302424e908af96b434"
+        "name": "OneDuo-0.2.5-windows-x64-setup.exe",
+        "size": 49899395,
+        "sha256": "70f3407f747b1061c3c2449367b6045cb5b5fa3a05ddbfb540a01adf62c73770"
       }
     }
   },
