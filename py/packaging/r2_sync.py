@@ -86,12 +86,21 @@ def put(key, data: bytes, ctype, cache="public, max-age=300"):
 
 
 def remote_size(key):
-    try:
-        req = urllib.request.Request(f"{PUBLIC}/{key}", method="HEAD", headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return int(r.headers.get("Content-Length") or -1)
-    except urllib.error.HTTPError:
-        return -1
+    """R2 上这个文件多大（只读响应头）。404 → -1；网络抖一下（TLS 握手断、超时）重试几次，
+    不能因为核对这一步断网就让整个发版失败（2026-11-21 0.2.4 上传成功却在这里 SSL 报错退出）"""
+    last = None
+    for i in range(4):
+        try:
+            req = urllib.request.Request(f"{PUBLIC}/{key}", method="HEAD", headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return int(r.headers.get("Content-Length") or -1)
+        except urllib.error.HTTPError:
+            return -1
+        except Exception as e:  # noqa: BLE001
+            last = e
+            import time as _t
+            _t.sleep(3 * (i + 1))
+    raise SystemExit(f"核对 R2 文件大小时网络一直不通：{key} {last}")
 
 
 def get(url, timeout=60):

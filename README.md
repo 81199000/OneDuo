@@ -9,7 +9,7 @@
   <a href="https://oneduo.app"><b>oneduo.app</b></a>
 </p>
 
-> ⭐ **点个 Star，再关注 [@WuWeiDuo](https://github.com/WuWeiDuo)，避免走失。** 原 GitHub 账号 81199000 已停用，项目搬到了这里：<https://github.com/WuWeiDuo/OneDuo>。官网 **[oneduo.app](https://oneduo.app)** 是长期固定入口，以后仓库再搬家也能从官网找到。
+> ⭐ **点个 Star，再关注 [@81199000](https://github.com/81199000)，避免走失。** 官网 **[oneduo.app](https://oneduo.app)** 是长期固定入口，以后仓库再搬家也能从官网找到。
 
 ![一键签主界面](docs/tutorial/01-home.png)
 
