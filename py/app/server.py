@@ -190,7 +190,34 @@ def import_bundle(raw: bytes) -> dict:
             os.chmod(dest, 0o600)
     # 自己加的 IPA：apps.json 里记的是电脑上的绝对路径之外的文件名，文件已经跟着拷进 custom/
     log.info("import done: %s", got)
+    if got["devices"]:
+        restart_netmuxd()
     return got
+
+
+def restart_netmuxd() -> None:
+    """netmuxd 只在启动时（和发现陌生手机时）读配对记录目录；新导入的手机要重启它才认。
+    entrypoint.sh 里有守护循环，杀掉 3 秒后自动起来"""
+    import signal
+    import subprocess
+    try:
+        out = subprocess.run(["pgrep", "-f", "bin/netmuxd"], capture_output=True, text=True, timeout=5).stdout
+    except FileNotFoundError:   # 精简镜像没有 pgrep：扫 /proc
+        out = ""
+        for d in Path("/proc").glob("[0-9]*"):
+            try:
+                if b"netmuxd" in (d / "cmdline").read_bytes():
+                    out += d.name + "\n"
+            except OSError:
+                pass
+    except Exception:  # noqa: BLE001
+        out = ""
+    for pid in out.split():
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+            log.info("restarted netmuxd (pid %s) to load new pairing records", pid)
+        except (OSError, ValueError):
+            pass
 
 
 # MARK: HTTP

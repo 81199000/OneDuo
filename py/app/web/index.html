@@ -208,13 +208,21 @@
 </div></div>
 
 <div class="mask" id="moveMask"><div class="dialog">
-  <h3>搬到 NAS</h3>
-  <p>先在 NAS 上装好一键签 NAS 版（群晖：Container Manager 里导入项目即可）。填 NAS 的地址，点「开始搬」，这台电脑上的手机、Apple ID 登录、已装的 App 记录会一起搬过去。<b>手机先用数据线连着这台电脑、解锁。</b></p>
+  <h3>装到 NAS</h3>
+  <p class="dim" style="margin-top:-4px">装好后 NAS 24 小时自动续签，电脑可以关机。<b>手机先用数据线连着这台电脑、解锁。</b></p>
+  <div id="nasPick"></div>
   <label>NAS 地址</label><input id="moveAddr" placeholder="例如 192.168.1.10" spellcheck="false" autocomplete="off">
-  <label>NAS 版访问密码（没设就留空）</label><input id="movePw" type="password" autocomplete="off">
+  <div id="nasCred">
+    <label>NAS 登录账号（管理员）</label><input id="nasUser" autocomplete="off" spellcheck="false">
+    <label>密码</label><input id="nasPw" type="password" autocomplete="off">
+    <div id="nasOtpBox" style="display:none"><label>两步验证码</label><input id="nasOtp" class="code" maxlength="6" inputmode="numeric"></div>
+    <div class="dim" style="font-size:12px;margin-top:6px">账号密码只用来这一次自动安装，不保存。</div>
+  </div>
+  <ul class="steps" id="nasSteps" style="display:none"></ul>
+  <div class="bar" id="nasBar" style="display:none"><div></div></div>
   <div class="err" id="moveErr"></div>
-  <div class="row"><button class="ghost" onclick="$('moveMask').classList.remove('show')">取消</button>
-    <button class="primary" id="moveGo" onclick="doMove()">开始搬</button></div>
+  <div class="row"><button class="ghost" id="moveCancel" onclick="$('moveMask').classList.remove('show')">取消</button>
+    <button class="primary" id="moveGo" onclick="doMove()">开始安装</button></div>
 </div></div>
 
 <div class="mask" id="loginMask"><div class="dialog">
@@ -273,12 +281,18 @@ window.onEvent = (ev, d) => {
   else if (ev === "source_added") { S.addingSource = false; $("srcUrl") && ($("srcUrl").value = ""); toast(`已添加「${d.name}」，共 ${d.count} 个 App`); renderSet(); }
   else if (ev === "source_error") { S.addingSource = false; renderSet(); toast("没加上：" + d); }
   else if (ev === "step") setStep(d.step, d.state, d.note);
+  else if (ev === "progress" && d.step === "nas") { const b = $("nasBar"); b.style.display = "block"; b.firstChild.style.width = (d.value*100).toFixed(0)+"%"; }
   else if (ev === "progress") { const b = document.querySelector(".bar"); if (b) { b.style.display = "block"; b.firstChild.style.width = (d.value*100).toFixed(0)+"%"; } }
   else if (ev === "log") msg(d);
   else if (ev === "need_login") { $("loginMask").classList.add("show"); setTimeout(() => $("user").focus(), 50); }
   else if (ev === "need_2fa") { openCode(d); }
   else if (ev === "done") finish(true);
   else if (ev === "error") finish(false, d);
+  else if (ev === "nas_step") nasStep(d.key, d.text);
+  else if (ev === "nas_done") { $("moveGo").disabled = false; $("moveGo").textContent = "开始安装"; nasStep("__done"); nasDone(d); }
+  else if (ev === "nas_error") { $("moveGo").disabled = false; $("moveGo").textContent = "重试"; $("nasCred").style.display = ""; $("moveErr").textContent = d;
+    const on = document.querySelector("#nasSteps li.on"); if (on) on.className = "err"; }
+  else if (ev === "nas_otp") { $("moveGo").disabled = false; $("moveGo").textContent = "继续"; $("nasCred").style.display = ""; $("nasOtpBox").style.display = ""; $("moveErr").textContent = d; $("nasSteps").style.display = "none"; setTimeout(() => $("nasOtp").focus(), 50); }
   else if (ev === "self_update") { openUpdate(d); }
   else if (ev === "self_update_progress") { updProgress(d); }
 };
@@ -384,23 +398,59 @@ function renderMine() {
       <span class="sw ${S.autostart ? "on" : ""}" onclick="api().set_autostart(${!S.autostart}).then(v => { S.autostart = v; renderMine(); })"></span>
     </div>
     <div class="pilotbar" style="margin-top:12px">
-      <div class="t"><h3>搬到 NAS</h3><p>家里有群晖等 NAS？装上一键签 NAS 版后点这里，手机、Apple ID、已装的 App 一次搬过去。NAS 24 小时开着，电脑关机也照样自动续签。</p></div>
-      <button class="smallbtn" onclick="openMove()">搬到 NAS</button>
+      <div class="t"><h3>装到 NAS</h3><p>家里有群晖 NAS？点这里自动装一键签 NAS 版，手机、Apple ID、已装的 App 一起搬过去。NAS 24 小时开着，电脑关机也照样自动续签。</p></div>
+      <button class="smallbtn" onclick="openMove()">装到 NAS</button>
     </div>`}`;
 }
 
+const NAS_STEPS = [["connect","连接 NAS"],["login","登录"],["check","检查 Docker"],["upload","上传一键签 NAS 版"],["import","导入"],["project","创建并启动"],["wait","等它启动"],["move","搬手机和 Apple ID"]];
+let NAS = { mode: "install" };
 async function openMove() {
-  $("moveErr").textContent = ""; $("moveGo").disabled = false; $("moveGo").textContent = "开始搬";
-  $("moveAddr").value = await api().nas_addr(); $("moveMask").classList.add("show"); setTimeout(() => $("moveAddr").focus(), 50);
+  $("moveErr").textContent = ""; $("moveGo").disabled = false; $("moveGo").textContent = "开始安装";
+  $("nasSteps").style.display = "none"; $("nasBar").style.display = "none"; $("nasCred").style.display = "";
+  $("nasOtpBox").style.display = "none"; $("nasOtp").value = "";
+  $("moveAddr").value = (await api().nas_addr()).replace(/^https?:\/\//, "").replace(/:8686$/, "");
+  $("nasPick").innerHTML = '<div class="dim" style="font-size:13px">正在找家里的 NAS…</div>';
+  $("moveMask").classList.add("show");
+  const list = await api().find_nas();
+  if (!list.length) { $("nasPick").innerHTML = '<div class="dim" style="font-size:13px">没自动找到，手动填 NAS 的 IP 地址</div>'; return; }
+  $("nasPick").innerHTML = list.map(n => `<div class="srow" style="cursor:pointer" onclick="pickNas('${n.host}', ${!!n.installed && n.kind !== "synology" ? 1 : 0}, ${n.installed ? 1 : 0})">
+    <span class="radio"></span><div class="t"><h4>${esc(n.name)} <span class="m" style="display:inline">${esc(n.host)}</span></h4>
+    <div class="m">${n.installed ? "已经装了一键签 NAS 版，点「开始」直接搬手机" : n.docker === false ? "没装 Container Manager：先去套件中心装上" : "可以自动安装"}</div></div></div>`).join("");
+  pickNas(list[0].host, list[0].kind === "oneduo" ? 1 : 0, list[0].installed ? 1 : 0);
+}
+function pickNas(host, onlyMove, installed) {
+  $("moveAddr").value = host;
+  document.querySelectorAll("#nasPick .radio").forEach((r, i) => r.classList.toggle("on", r.closest(".srow").textContent.includes(host)));
+  NAS.mode = installed ? "move" : "install";
+  $("nasCred").style.display = NAS.mode === "move" ? "none" : "";
+  $("moveGo").textContent = NAS.mode === "move" ? "开始搬" : "开始安装";
+}
+function nasStep(key, text) {
+  const ul = $("nasSteps"); ul.style.display = "";
+  if (!ul.children.length) ul.innerHTML = NAS_STEPS.map(([k, t]) => `<li id="ns-${k}"><span class="dot"></span><span>${t}</span><span class="note"></span></li>`).join("");
+  let hit = false;
+  for (const [k] of NAS_STEPS) { const li = $("ns-" + k); if (k === key) { li.className = "on"; hit = true; } else if (!hit) li.className = "ok"; }
+  if (key !== "upload") $("nasBar").style.display = "none";
 }
 async function doMove() {
   const a = $("moveAddr").value.trim(); if (!a) { $("moveErr").textContent = "请填 NAS 地址"; return; }
-  $("moveGo").disabled = true; $("moveGo").textContent = "正在搬…"; $("moveErr").textContent = "";
-  const r = await api().move_to_nas(a, $("movePw").value);
-  $("moveGo").disabled = false; $("moveGo").textContent = "开始搬";
-  if (!r.ok) { $("moveErr").textContent = r.error; return; }
-  $("moveMask").classList.remove("show"); $("movePw").value = "";
-  toast(`已搬到 NAS：${r.devices} 台手机${r.apple_id ? "、Apple ID" : ""}、${r.installs} 个 App。以后在浏览器打开 ${r.url} 管理，电脑可以关机了`);
+  $("moveErr").textContent = ""; $("moveGo").disabled = true;
+  if (NAS.mode === "move") {
+    $("moveGo").textContent = "正在搬…";
+    const r = await api().move_to_nas(a, "");
+    $("moveGo").disabled = false; $("moveGo").textContent = "开始搬";
+    if (!r.ok) { $("moveErr").textContent = r.error; return; }
+    nasDone(r); return;
+  }
+  const u = $("nasUser").value.trim(), pw = $("nasPw").value;
+  if (!u || !pw) { $("moveErr").textContent = "请填 NAS 的登录账号和密码"; $("moveGo").disabled = false; return; }
+  $("moveGo").textContent = "安装中…"; $("nasCred").style.display = "none"; $("nasSteps").innerHTML = "";
+  api().install_to_nas(a, u, pw, $("nasOtp").value.trim());
+}
+function nasDone(r) {
+  $("moveMask").classList.remove("show"); $("nasPw").value = ""; $("nasOtp").value = "";
+  toast(`装好了！${r.devices} 台手机${r.apple_id ? "、Apple ID" : ""}、${r.installs} 个 App 已搬到 NAS。以后打开 ${r.url} 管理，电脑可以关机了`);
   api().open_url(r.url);
 }
 
