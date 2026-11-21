@@ -40,9 +40,37 @@ def token():
 
 
 TOK = token()
+# 发版脚本刚打好的包在这些目录：先找本机同名同大小的文件，省掉从 Gitee 再下一遍
+LOCAL_DIRS = [pathlib.Path(p).expanduser() for p in
+              os.environ.get("ONEDUO_LOCAL_IPA_DIRS", "~/Projects/douduo/build:~/Projects/hongguo/build").split(":")]
+
+
+def put_path(key, path, ctype, cache):
+    """大文件用 curl 传：Python urllib 走本机代理传 R2 约 0.3MB/s 还会 Broken pipe，curl 同网约 6MB/s（2026-11-21 实测 22MB：77s → 3.4s）"""
+    import subprocess
+    for i in range(4):
+        r = subprocess.run(["curl", "-s", "-m", "600", "-X", "PUT", "-H", "Authorization: Bearer " + TOK,
+                            "-H", "Content-Type: " + ctype, "-H", "Cache-Control: " + cache,
+                            "--data-binary", "@" + str(path), API + key], capture_output=True, text=True)
+        try:
+            if json.loads(r.stdout or "{}").get("success"):
+                print(f"  ↑ {key}  ({pathlib.Path(path).stat().st_size:,} B)")
+                return
+        except ValueError:
+            pass
+        print(f"  上传失败重试 {i + 1}：{key} {r.stderr.strip() or r.stdout[:120]}")
+    raise SystemExit(f"上传失败：{key}")
 
 
 def put(key, data: bytes, ctype, cache="public, max-age=300"):
+    if len(data) > 2_000_000:   # 大文件统一走 curl
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(data)
+        try:
+            return put_path(key, f.name, ctype, cache)
+        finally:
+            os.unlink(f.name)
     for i in range(4):
         req = urllib.request.Request(API + key, data=data, method="PUT", headers={
             "Authorization": "Bearer " + TOK, "Content-Type": ctype, "Cache-Control": cache})
@@ -78,12 +106,15 @@ def put_file_if_needed(key, src_url=None, path=None, size=0):
         print(f"  = {key}（已存在）")
         return
     if path:
-        data = path.read_bytes()
-    else:
-        print(f"  ↓ {src_url}")
-        data = get(src_url, timeout=600)
-        if size and len(data) != size:
-            raise SystemExit(f"下载大小不对：{src_url} {len(data)} ≠ {size}")
+        return put_path(key, path, "application/octet-stream", "public, max-age=31536000, immutable")
+    local = next((d / src_url.rsplit("/", 1)[-1] for d in LOCAL_DIRS if src_url and (d / src_url.rsplit("/", 1)[-1]).is_file()), None)
+    if local and (not size or local.stat().st_size == size):
+        print(f"  ⇢ 用本机 {local}")
+        return put_path(key, local, "application/octet-stream", "public, max-age=31536000, immutable")
+    print(f"  ↓ {src_url}")
+    data = get(src_url, timeout=600)
+    if size and len(data) != size:
+        raise SystemExit(f"下载大小不对：{src_url} {len(data)} ≠ {size}")
     put(key, data, "application/octet-stream", "public, max-age=31536000, immutable")
 
 
@@ -106,8 +137,15 @@ def sync_app(app):
     if not gitee_src:
         print(f"{aid}：没有 Gitee 软件源，跳过")
         return
-    print(f"{aid}：{gitee_src}")
-    j = json.loads(get(gitee_src).decode("utf-8-sig"))
+    # 发版脚本会传 ONEDUO_LOCAL_SOURCES="douduo=/path/docs/source/douduo.json"：直接读刚生成的本地源，
+    # 不等 Gitee raw 的 CDN 缓存（以前缓存没刷新会照抄上一版，得轮询几分钟再重跑）
+    local_src = dict(x.split("=", 1) for x in os.environ.get("ONEDUO_LOCAL_SOURCES", "").split(",") if "=" in x).get(aid)
+    if local_src and pathlib.Path(local_src).expanduser().is_file():
+        print(f"{aid}：本机 {local_src}")
+        j = json.loads(pathlib.Path(local_src).expanduser().read_text("utf-8-sig"))
+    else:
+        print(f"{aid}：{gitee_src}")
+        j = json.loads(get(gitee_src).decode("utf-8-sig"))
     for a in j.get("apps", []):
         for v in a.get("versions") or [a]:
             url = v.get("downloadURL") or v.get("downloadUrl") or ""
@@ -127,6 +165,9 @@ def sync_app(app):
 
 def main():
     args = sys.argv[1:]
+    if args[:1] == ["--put"]:   # 发版脚本：IPA 一打好就先传，和 GitHub / Gitee 上传并行
+        put_file_if_needed(args[1], path=pathlib.Path(args[2]))
+        return
     if args[:1] == ["--installer"]:
         tag, files = args[1], [pathlib.Path(f) for f in args[2:]]
         print(f"一键签安装包 → oneduo/{tag}/")
