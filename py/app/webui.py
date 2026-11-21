@@ -80,7 +80,7 @@ class Api:
                 "min_ios": a.min_ios, "homepage": a.homepage, "source_id": a.source_id,
                 "bundle_id": a.bundle_id, "version": a.latest_version, "size": a.asset_size,
                 "has_asset": bool(a.asset_url) if a.latest_version or a.unsupported else None,
-                "unsupported": a.unsupported,
+                "unsupported": a.unsupported, "error": "" if a.latest_version else a.resolve_error,
                 "notes": a.latest_notes, "date": a.latest_date,
                 "icon": "data:image/png;base64," + base64.b64encode(ic).decode() if ic else ""}
 
@@ -116,6 +116,7 @@ class Api:
                 try:
                     core.resolve_latest(a)
                 except Exception as e:  # noqa: BLE001
+                    a.resolve_error = str(e)[:160]
                     log.warning("resolve %s failed: %s", a.id, e)
         except Exception as e:  # noqa: BLE001
             cat = self._catalog
