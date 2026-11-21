@@ -53,10 +53,16 @@ if [[ -z $ONEDUO_ASC_KEY ]]; then
   exit 0
 fi
 print "提交苹果公证（一般几分钟）…"
-xcrun notarytool submit "$OUT" --key "$ONEDUO_ASC_KEY" --key-id "$ONEDUO_ASC_KEY_ID" --issuer "$ONEDUO_ASC_ISSUER" \
-  --wait --timeout 30m --output-format json > dist/notary.json || true
-STATUS=$(python3 -c "import json; print(json.load(open('dist/notary.json')).get('status',''))" 2>/dev/null)
-SUB=$(python3 -c "import json; print(json.load(open('dist/notary.json')).get('id',''))" 2>/dev/null)
+# 上传到苹果时网络断了（abortedUpload / 连接重置）会直接失败：重试 3 次，不用重新打包签名
+for i in 1 2 3; do
+  xcrun notarytool submit "$OUT" --key "$ONEDUO_ASC_KEY" --key-id "$ONEDUO_ASC_KEY_ID" --issuer "$ONEDUO_ASC_ISSUER" \
+    --wait --timeout 30m --output-format json > dist/notary.json 2>dist/notary.err || true
+  # notary.json 是空的（上传断了）时 python 会报错；脚本开着 set -e，不加 || true 会直接退出、根本不重试
+  STATUS=$(python3 -c "import json; print(json.load(open('dist/notary.json')).get('status',''))" 2>/dev/null || true)
+  SUB=$(python3 -c "import json; print(json.load(open('dist/notary.json')).get('id',''))" 2>/dev/null || true)
+  [[ -n $STATUS ]] && break          # 苹果给了结果（通过或不通过）就不再重试
+  echo "⚠️ 公证上传没成功（第 $i 次）：$(head -c 160 dist/notary.err)"; sleep 15
+done
 if [[ $STATUS != Accepted ]]; then
   echo "❌ 公证没通过（$STATUS）"
   [[ -n $SUB ]] && xcrun notarytool log "$SUB" --key "$ONEDUO_ASC_KEY" --key-id "$ONEDUO_ASC_KEY_ID" --issuer "$ONEDUO_ASC_ISSUER" | head -60
