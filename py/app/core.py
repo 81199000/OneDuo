@@ -447,13 +447,31 @@ _FRIENDLY = [
     # 只认 idevice 的设备锁屏错误（"device locked" / "device is locked" / DeviceLocked / PasswordProtected）
     (r"device (is )?locked|DeviceLocked|PasswordProtected", "手机锁着屏，请解锁后保持亮屏"),
     (r"Developer Mode|developer mode", "手机没打开开发者模式（设置 → 隐私与安全性 → 开发者模式）"),
-    (r"pair|Trust|trust", "手机还没信任这台电脑：在手机上点「信任」并输入锁屏密码"),
+    # 只认 idevice 的配对错误；以前 "pair|trust" 会被 App 里的 TrustKit.framework 之类文件名误命中（工单 B14）
+    (r"pairing file|pair ?record|InvalidHostID|pairing trust|denied pairing|Pairing rejected|Pair verify|"
+     r"PairingDialogResponsePending|UserDeniedPairing|not paired|NotPaired",
+     "手机还没信任这台电脑：在手机上点「信任」并输入锁屏密码"),
     (r"No devices connected", "没找到手机：请用数据线连接，并解锁手机"),
     (r"2FA|two.factor|verification", "验证码不对或已过期，重新获取"),
 ]
 
 
+_LOG_LINE = re.compile(r"^\[\S+\s+(TRACE|DEBUG|INFO|WARN)\s")
+
+
+def _error_part(msg: str) -> str:
+    """plumesign 的整段输出里混着 info 日志（签名时每个文件一行 copying file …），
+    只拿真正的报错去匹配：anyhow 最后打的 "Error: …"（含 Caused by）；没有就去掉普通日志行（工单 B14）"""
+    lines = msg.splitlines()
+    idx = [i for i, ln in enumerate(lines) if ln.startswith("Error:")]
+    if idx:
+        return "\n".join(lines[idx[-1]:])
+    kept = [ln for ln in lines if not _LOG_LINE.match(ln)]
+    return "\n".join(kept) if any(ln.strip() for ln in kept) else msg
+
+
 def friendly(msg: str) -> str:
+    msg = _error_part(msg)
     for pat, text in _FRIENDLY:
         if re.search(pat, msg, re.I):
             return text
