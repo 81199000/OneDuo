@@ -210,11 +210,20 @@ impl Account {
         let iters = res.get("i").unwrap().as_signed_integer().unwrap();
         let c = res.get("c").unwrap().as_string().unwrap();
 
+        // 苹果按账号选 SRP 协议（响应里的 "sp"）：s2k 直接用 SHA256 原始字节；
+        // s2k_fo 要先把 SHA256 转成小写十六进制字符串再做 PBKDF2。
+        // 以前一律按 s2k 算，被分到 s2k_fo 的账号密码再对也报 -20101「密码不对」（工单 B19）
+        let protocol = res.get("sp").and_then(|v| v.as_string()).unwrap_or("s2k");
         let hashed_password = Sha256::digest(password.as_bytes());
+        let pbkdf2_input: Vec<u8> = if protocol == "s2k_fo" {
+            hex::encode(hashed_password).into_bytes()
+        } else {
+            hashed_password.to_vec()
+        };
 
         let mut password_buf = [0u8; 32];
         pbkdf2::pbkdf2::<hmac::Hmac<Sha256>>(
-            &hashed_password,
+            &pbkdf2_input,
             salt,
             iters as u32,
             &mut password_buf,
