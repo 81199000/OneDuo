@@ -2,7 +2,7 @@
 # 一键签发版（维护者在 Mac 上跑）：
 #   ./release.sh 0.1.1 "这一版的更新说明（显示在更新弹窗里）"
 #   每个安装包只编译一次、每个渠道只上传一次；上传完只读服务器返回的文件大小核对，不再下载回来。
-#   Windows 打包机默认 Administrator@windows-builder.local（5090 启动在 Win11 时），可用 ONETAP_WIN 改。
+#   Windows 打包机用 ONETAP_WIN 指定（可写在 ~/.config/oneduo/sign.env，不入库）。
 #
 # 依次：改版本号 → Mac 打包 + 签名公证 → Windows 打包（远程 Windows 机器）→ GitHub Release（存档）
 #       → 【渠道①】Gitee 发行版 → 【渠道②】R2（dl.oneduo.app）→ 改 catalog/apps.json 并推到 Gitee + R2
@@ -32,9 +32,10 @@ print "0/6 发前检查"
 python3 -m py_compile app/*.py || die "Python 代码编译不过"
 .venv-universal/bin/python -c "import app.core, app.sources, app.certs, app.selfupdate, app.autopilot, app.webui, certifi" \
   || die "模块导入失败（缺依赖？先 .venv-universal/bin/pip install -r requirements.txt）"
-[[ -n $ONETAP_WIN ]] || ONETAP_WIN=Administrator@windows-builder.local   # Windows 打包机 = 5090（要启动在 Win11）
+[[ -n $ONETAP_WIN ]] || { [[ -f ~/.config/oneduo/sign.env ]] && source ~/.config/oneduo/sign.env; }
+[[ -n $ONETAP_WIN ]] || die "没设 ONETAP_WIN（用户@Windows打包机），写进 ~/.config/oneduo/sign.env"
 ssh -4 -o BatchMode=yes -o ConnectTimeout=8 "$ONETAP_WIN" "hostname" >/dev/null 2>&1 \
-  || die "Windows 打包机 $ONETAP_WIN 连不上（5090 要启动在 Win11，不能在 Ubuntu）"
+  || die "Windows 打包机 $ONETAP_WIN 连不上（确认 Windows 打包机已开机）"
 export ONETAP_WIN
 echo "✅ 发前检查通过"
 

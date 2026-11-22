@@ -1,5 +1,9 @@
+# 编译产物里不写入本机用户目录（CARGO_HOME / 源码路径）
+[target.x86_64-pc-windows-gnu]
+rustflags = ["--remap-path-prefix=/Users=/build"]
+
 [target.x86_64-apple-darwin]
-rustflags = ["-C", "link-arg=-mmacosx-version-min=10.13"]
+rustflags = ["--remap-path-prefix=/Users=/build", "-C", "link-arg=-mmacosx-version-min=10.13"]
 
 [target.aarch64-apple-darwin]
-rustflags = ["-C", "link-arg=-mmacosx-version-min=10.13"]
+rustflags = ["--remap-path-prefix=/Users=/build", "-C", "link-arg=-mmacosx-version-min=10.13"]
