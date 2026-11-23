@@ -4,7 +4,7 @@
 ; 苹果手机驱动来自苹果官方 iTunes 安装包（iTunes64Setup.exe /extract 得到），只装驱动不装 iTunes。
 
 #ifndef AppVersion
-  #define AppVersion "0.2.5"
+  #define AppVersion "0.2.6"
 #endif
 
 [Setup]
