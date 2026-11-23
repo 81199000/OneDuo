@@ -2,8 +2,8 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.2.5",
-    "notes": "新功能：装到 NAS。在「我的手机」最下面点「装到 NAS」，自动找到家里的群晖，填 NAS 账号密码就自动装好一键签 NAS 版，手机和 Apple ID 一起搬过去。NAS 24 小时开着，电脑关机也能自动续签。目前只在群晖上实测过。",
+    "latest": "0.2.6",
+    "notes": "修复登录：① 部分账号密码明明正确，登录 Apple ID 却提示「Apple ID 或密码不对」；② 安装 App 时报错误代码 -23782、提示「需要 macOS 10.13」（Windows 上也会这样提示）——现在会自动换用较新的 Mac 身份重试登录，仍失败会给出中文说明。",
     "download": {
       "gitee": "https://oneduo.app/#download",
       "github": "https://oneduo.app/#download",
@@ -11,14 +11,14 @@
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.2.5-macos-universal.zip",
-        "size": 29932845,
-        "sha256": "d1b406149c0c982be802d940041e8ca34ae1aa186b92014db116dad5b481badf"
+        "name": "OneDuo-0.2.6-macos-universal.zip",
+        "size": 29935791,
+        "sha256": "ba44c63ad867a3f8675bf24edd7378924978dcf1b7433d212dcfd7db93de57d1"
       },
       "windows": {
-        "name": "OneDuo-0.2.5-windows-x64-setup.exe",
-        "size": 49899395,
-        "sha256": "70f3407f747b1061c3c2449367b6045cb5b5fa3a05ddbfb540a01adf62c73770"
+        "name": "OneDuo-0.2.6-windows-x64-setup.exe",
+        "size": 49908176,
+        "sha256": "b2edb04d2df7d080a24029dfbbe4e811a22a2515352fbded9bc02d92a0c5fe0e"
       }
     }
   },
