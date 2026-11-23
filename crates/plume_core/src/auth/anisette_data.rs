@@ -5,11 +5,19 @@ use omnisette::{AnisetteConfiguration, AnisetteHeaders};
 
 use crate::Error;
 
+/// 公共 anisette 服务器报的身份是 Mac OS X 10.12.6，苹果对部分账号会拒绝登录：
+/// -23782「A Mac with macOS version 10.13 or later is required」（工单 B33）。
+/// 收到这个错误后改用这个较新的 Mac 身份重试，并在本次会话里一直沿用。
+pub const MODERN_CLIENT_INFO: &str =
+    "<MacBookPro13,3> <macOS;13.6.7;22G720> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
+
 #[derive(Debug, Clone)]
 pub struct AnisetteData {
     pub base_headers: HashMap<String, String>,
     pub generated_at: SystemTime,
     pub config: AnisetteConfiguration,
+    /// 非空时替换 anisette 服务器给的 X-Mme-Client-Info（见 MODERN_CLIENT_INFO）
+    pub client_info_override: Option<String>,
 }
 
 impl AnisetteData {
@@ -21,6 +29,7 @@ impl AnisetteData {
             base_headers,
             generated_at: SystemTime::now(),
             config,
+            client_info_override: None,
         })
     }
 
@@ -35,7 +44,9 @@ impl AnisetteData {
     }
 
     pub async fn refresh(&self) -> Result<Self, crate::Error> {
-        Self::new(self.config.clone()).await
+        let mut data = Self::new(self.config.clone()).await?;
+        data.client_info_override = self.client_info_override.clone();
+        Ok(data)
     }
 
     pub fn generate_headers(
@@ -52,8 +63,9 @@ impl AnisetteData {
         let old_client_info = headers.remove("X-Mme-Client-Info");
 
         if client_info {
-            let client_info = match old_client_info {
-                Some(v) => {
+            let client_info = match (&self.client_info_override, old_client_info) {
+                (Some(o), _) => o.clone(),
+                (None, Some(v)) => {
                     let temp = v.as_str();
 
                     temp.replace(
@@ -61,7 +73,7 @@ impl AnisetteData {
                         "com.apple.AuthKit/1 (com.apple.akd/1.0)",
                     )
                 }
-                None => {
+                (None, None) => {
                     return headers;
                 }
             };
