@@ -485,6 +485,9 @@ _FRIENDLY = [
     # 苹果返回 -20209「This Apple ID has been locked for security reasons」：是账号被锁，不是手机锁屏（工单 B10）
     (r"-20209|Apple ID has been (locked|disabled)|account (is |has been )?(locked|disabled)",
      "Apple ID 被苹果锁定了（安全原因），去 iforgot.apple.com 解锁或改密码后再登录"),
+    # 苹果 -23782「A Mac with macOS version 10.13 or later is required」：嫌登录用的 Mac 身份太旧，
+    # 和用户电脑系统无关；内核已自动换新身份重试，仍失败才会走到这里（工单 B33）
+    (r"-23782|macOS version 10\.13", "苹果暂时拒绝了这个 Apple ID 的登录（错误 -23782，和你电脑的系统版本无关），请升级一键签到最新版后重试，或换一个 Apple ID"),
     (r"Incorrect|-20101|invalid.*credentials|password", "Apple ID 或密码不对"),
     (r"maximum number of apps|limit.*app ids|-7.*7.?day", "免费 Apple ID 7 天内最多注册 10 个 App ID，过几天再装或换个 Apple ID"),
     (r"3 apps|maximum.*installed|too many", "免费 Apple ID 同时最多装 3 个自签 App，先删掉一个再装"),

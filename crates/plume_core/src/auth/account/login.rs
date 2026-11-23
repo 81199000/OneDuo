@@ -7,7 +7,7 @@ use srp::groups::G2048;
 use crate::Error;
 
 use crate::auth::account::{check_error, parse_response};
-use crate::auth::anisette_data::AnisetteData;
+use crate::auth::anisette_data::{AnisetteData, MODERN_CLIENT_INFO};
 use crate::auth::{
     Account, ChallengeRequest, ChallengeRequestBody, GSA_ENDPOINT, InitRequest, InitRequestBody,
     LoginState, RequestHeader, TrustedPhoneNumber, TwoFactorAction, TwoFactorMethod,
@@ -149,6 +149,26 @@ impl Account {
     }
 
     pub async fn login_email_pass(
+        &mut self,
+        username: &str,
+        password: &str,
+    ) -> Result<LoginState, Error> {
+        match self.login_email_pass_once(username, password).await {
+            // 苹果嫌公共 anisette 报的 Mac OS X 10.12.6 太旧（-23782「需要 macOS 10.13 或更高」），
+            // 和用户电脑是 Windows 还是 Mac 无关；换成较新的 Mac 身份重试一次（工单 B33）
+            Err(Error::AuthSrpWithMessage(-23782, _))
+                if self.anisette.lock().await.client_info_override.is_none() =>
+            {
+                log::warn!("Apple 返回 -23782，改用较新的 macOS 身份重试登录");
+                self.anisette.lock().await.client_info_override =
+                    Some(MODERN_CLIENT_INFO.to_string());
+                self.login_email_pass_once(username, password).await
+            }
+            other => other,
+        }
+    }
+
+    async fn login_email_pass_once(
         &mut self,
         username: &str,
         password: &str,
