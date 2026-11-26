@@ -2,8 +2,8 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.2.6",
-    "notes": "修复登录：① 部分账号密码明明正确，登录 Apple ID 却提示「Apple ID 或密码不对」；② 安装 App 时报错误代码 -23782、提示「需要 macOS 10.13」（Windows 上也会这样提示）——现在会自动换用较新的 Mac 身份重试登录，仍失败会给出中文说明。",
+    "latest": "0.2.7",
+    "notes": "新增「装到电视」：在「我的手机」页一键找到局域网里的安卓电视，自动下载并装好 GuoDuo TV；修复若干小问题。",
     "download": {
       "gitee": "https://oneduo.app/#download",
       "github": "https://oneduo.app/#download",
@@ -11,14 +11,14 @@
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.2.6-macos-universal.zip",
-        "size": 29935791,
-        "sha256": "ba44c63ad867a3f8675bf24edd7378924978dcf1b7433d212dcfd7db93de57d1"
+        "name": "OneDuo-0.2.7-macos-universal.zip",
+        "size": 29950587,
+        "sha256": "079772d230f210fe0008f211a82c88698fb0a93718098b8484cd55b5634433c6"
       },
       "windows": {
-        "name": "OneDuo-0.2.6-windows-x64-setup.exe",
-        "size": 49908176,
-        "sha256": "b2edb04d2df7d080a24029dfbbe4e811a22a2515352fbded9bc02d92a0c5fe0e"
+        "name": "OneDuo-0.2.7-windows-x64-setup.exe",
+        "size": 49723129,
+        "sha256": "0ec25e0e5b8b66d73f805d5f29d5add509e42dc5d7b0e685f373ad873b8e5853"
       }
     }
   },
