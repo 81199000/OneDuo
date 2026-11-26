@@ -225,6 +225,19 @@
     <button class="primary" id="moveGo" onclick="doMove()">开始安装</button></div>
 </div></div>
 
+<div class="mask" id="tvMask"><div class="dialog">
+  <h3>装到电视</h3>
+  <p class="dim" style="margin-top:-4px">把 <b>GuoDuo TV</b>（红果短剧电视版）装到家里的安卓电视 / 盒子。电视和这台电脑要连同一个网络。</p>
+  <div class="safe" style="margin:10px 0"><div class="safe-note">第一次装要先打开电视的 ADB 调试：电视「设置 → 关于 → 连按版本号 7 次」打开开发者选项，再在「开发者选项」里打开 <b>ADB 调试 / 网络调试</b>。小米电视在「设置 → 账号与安全 → ADB 调试」。</div></div>
+  <div id="tvPick"></div>
+  <label>电视地址</label><input id="tvAddr" placeholder="例如 192.168.1.20（电视「设置 → 网络」里能看到）" spellcheck="false" autocomplete="off">
+  <ul class="steps" id="tvSteps" style="display:none"></ul>
+  <div class="bar" id="tvBar" style="display:none"><div></div></div>
+  <div class="err" id="tvErr"></div>
+  <div class="row"><button class="ghost" onclick="$('tvMask').classList.remove('show')">关闭</button>
+    <button class="primary" id="tvGo" onclick="doTv()">开始安装</button></div>
+</div></div>
+
 <div class="mask" id="loginMask"><div class="dialog">
   <h3>登录 Apple ID</h3>
   <div class="safe">
@@ -289,6 +302,11 @@ window.onEvent = (ev, d) => {
   else if (ev === "done") finish(true);
   else if (ev === "error") finish(false, d);
   else if (ev === "nas_step") nasStep(d.key, d.text);
+  else if (ev === "progress" && String(d.step).startsWith("tv_")) { const b = $("tvBar"); b.style.display = "block"; b.firstChild.style.width = (d.value*100).toFixed(0)+"%"; }
+  else if (ev === "tv_step") tvStep(d.key, d.text);
+  else if (ev === "tv_done") tvDone(d);
+  else if (ev === "tv_error") { $("tvGo").disabled = false; $("tvGo").textContent = "重试"; $("tvErr").textContent = d;
+    const on = document.querySelector("#tvSteps li.on"); if (on) on.className = "err"; }
   else if (ev === "nas_done") { $("moveGo").disabled = false; $("moveGo").textContent = "开始安装"; nasStep("__done"); nasDone(d); }
   else if (ev === "nas_error") { $("moveGo").disabled = false; $("moveGo").textContent = "重试"; $("nasCred").style.display = ""; $("moveErr").textContent = d;
     const on = document.querySelector("#nasSteps li.on"); if (on) on.className = "err"; }
@@ -400,6 +418,10 @@ function renderMine() {
     <div class="pilotbar" style="margin-top:12px">
       <div class="t"><h3>装到 NAS</h3><p>家里有群晖 NAS？点这里自动装一键签 NAS 版，手机、Apple ID、已装的 App 一起搬过去。NAS 24 小时开着，电脑关机也照样自动续签。</p></div>
       <button class="smallbtn" onclick="openMove()">装到 NAS</button>
+    </div>
+    <div class="pilotbar" style="margin-top:12px">
+      <div class="t"><h3>装到电视</h3><p>把 GuoDuo TV（红果短剧电视版）装到家里的安卓电视 / 盒子：自动找局域网里的电视，一键下载安装并打开。</p></div>
+      <button class="smallbtn" onclick="openTv()">装到电视</button>
     </div>`}`;
 }
 
@@ -452,6 +474,45 @@ function nasDone(r) {
   $("moveMask").classList.remove("show"); $("nasPw").value = ""; $("nasOtp").value = "";
   toast(`装好了！${r.devices} 台手机${r.apple_id ? "、Apple ID" : ""}、${r.installs} 个 App 已搬到 NAS。以后打开 ${r.url} 管理，电脑可以关机了`);
   api().open_url(r.url);
+}
+
+const TV_STEPS = [["connect","连接电视"],["approve","电视上点「允许」"],["download","下载 GuoDuo TV"],["install","安装"],["launch","打开"]];
+async function openTv() {
+  $("tvErr").textContent = ""; $("tvGo").disabled = false; $("tvGo").textContent = "开始安装";
+  $("tvSteps").style.display = "none"; $("tvSteps").innerHTML = ""; $("tvBar").style.display = "none";
+  $("tvAddr").value = await api().tv_addr();
+  $("tvPick").innerHTML = '<div class="dim" style="font-size:13px">正在找家里的电视…</div>';
+  $("tvMask").classList.add("show");
+  const list = await api().find_tv();
+  if (!list.length) { $("tvPick").innerHTML = '<div class="dim" style="font-size:13px">没自动找到：确认电视开着、已打开 ADB 调试，或手动填电视 IP</div>'; return; }
+  $("tvPick").innerHTML = list.map(n => `<div class="srow" style="cursor:pointer" onclick="pickTv('${n.host}')">
+    <span class="radio"></span><div class="t"><h4>${esc(n.name)} <span class="m" style="display:inline">${esc(n.host)}</span></h4>
+    <div class="m">${n.installed ? "已装 GuoDuo TV " + esc(n.installed) + "，可以重装 / 升级" : "可以安装"}</div></div></div>`).join("");
+  pickTv(($("tvAddr").value && list.some(n => n.host === $("tvAddr").value)) ? $("tvAddr").value : list[0].host);
+}
+function pickTv(host) {
+  $("tvAddr").value = host;
+  document.querySelectorAll("#tvPick .srow").forEach(r => r.querySelector(".radio").classList.toggle("on", r.textContent.includes(host)));
+}
+function tvStep(key, text) {
+  const ul = $("tvSteps"); ul.style.display = "";
+  if (!ul.children.length) ul.innerHTML = TV_STEPS.map(([k, t]) => `<li id="ts-${k}"><span class="dot"></span><span>${t}</span><span class="note"></span></li>`).join("");
+  if (key === "approve") { $("ts-approve").className = "on"; $("ts-approve").querySelector(".note").textContent = text; return; }
+  let hit = false;
+  for (const [k] of TV_STEPS) { const li = $("ts-" + k); if (k === key) { li.className = "on"; hit = true; } else if (!hit) li.className = "ok"; }
+  if (key !== "download" && key !== "install") $("tvBar").style.display = "none";
+}
+function doTv() {
+  const a = $("tvAddr").value.trim(); if (!a) { $("tvErr").textContent = "请选一台电视或填电视 IP"; return; }
+  $("tvErr").textContent = ""; $("tvGo").disabled = true; $("tvGo").textContent = "安装中…"; $("tvSteps").innerHTML = "";
+  api().install_to_tv(a);
+}
+function tvDone(r) {
+  for (const [k] of TV_STEPS) $("ts-" + k) && ($("ts-" + k).className = "ok");
+  $("tvBar").style.display = "none"; $("tvGo").disabled = false; $("tvGo").textContent = "完成";
+  $("tvGo").onclick = () => { $("tvMask").classList.remove("show"); $("tvGo").onclick = doTv; };
+  const what = !r.before ? `装好了 GuoDuo TV ${r.version}` : r.before === r.version ? `重装了 GuoDuo TV ${r.version}` : `把 GuoDuo TV 从 ${r.before} 升级到 ${r.version}`;
+  toast(`${r.tv}：${what}${r.launched ? "，已在电视上打开" : ""}`);
 }
 
 function fmtDate(t) { return t ? new Date(t * 1000).toLocaleDateString("zh-CN") : "—"; }

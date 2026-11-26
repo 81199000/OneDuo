@@ -540,6 +540,31 @@ class Api:
                 self.push("nas_error", str(e) if isinstance(e, core.SignError) else core.friendly(str(e)))
         threading.Thread(target=work, daemon=True).start()
 
+    # MARK: 装到电视（GuoDuo TV）
+
+    def find_tv(self):
+        from . import tvinstall
+        return tvinstall.scan()
+
+    def tv_addr(self):
+        return core.get_pref("tv_addr", "") or ""
+
+    def install_to_tv(self, addr):
+        """「装到电视」：电脑经 ADB 直连局域网里的安卓电视，下载校验 GuoDuo TV 后装上并打开。进度用 tv_step 推给页面"""
+        from . import tvinstall
+
+        def work():
+            host, _, port = str(addr).strip().partition(":")
+            try:
+                r = tvinstall.install(host, int(port or 5555),
+                                      step=lambda k, t: self.push("tv_step", {"key": k, "text": t}),
+                                      progress=lambda k, p: self.push("progress", {"step": "tv_" + k, "value": p}))
+                self.push("tv_done", r)
+            except Exception as e:  # noqa: BLE001
+                log.exception("install to tv failed")
+                self.push("tv_error", str(e) if isinstance(e, (tvinstall.TvError, core.SignError)) else core.friendly(str(e)))
+        threading.Thread(target=work, daemon=True).start()
+
     def find_nas(self):
         from . import nasfind
         return nasfind.scan()
