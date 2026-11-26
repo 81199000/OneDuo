@@ -14,9 +14,10 @@
 ## 同系列项目
 
 - **[DouDuo](https://github.com/81199000/DouDuo)**：第三方抖音客户端，原生 SwiftUI，适配折叠屏内屏 / iPad，推荐、评论、私信、直播都能用。
-- **[GuoDuo](https://github.com/81199000/GuoDuo)**：红果短剧第三方客户端，原生播放，适配折叠屏内屏 / iPad，支持弹幕和选集。
+- **[GuoDuo](https://github.com/81199000/GuoDuo)**：红果短剧第三方客户端，原生播放，适配折叠屏 / iPad，和 GuoDuo TV 联动。
+- **[GuoDuo TV](https://github.com/81199000/GuoDuo-TV)**：GuoDuo 的安卓电视 / 投影仪版：遥控器刷剧，手机扫码当遥控器，和手机版互相接着看。
 - **[一键签 OneDuo](https://github.com/81199000/OneDuo)**（本项目）：Windows / Mac 装机工具，用自己的 Apple ID 免费把上面这些 App 签名装到手机，到期自动续签、有新版自动更新。
-- 官网 **[oneduo.app](https://oneduo.app)**：三个项目的统一下载入口。
+- 官网 **[oneduo.app](https://oneduo.app)**：所有项目的统一下载入口。
 
 ![一键签主界面](docs/tutorial/01-home.png)
 
