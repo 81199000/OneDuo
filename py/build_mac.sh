@@ -6,6 +6,8 @@ cd "$(dirname "$0")"
 # 通用包（Apple 芯片 + Intel 都能跑）：plumesign 两个架构各编一份再 lipo 合并；
 # Python 用 python.org 的 universal2 版（Homebrew 的只有 arm64），所以单独一个 .venv-universal
 export MACOSX_DEPLOYMENT_TARGET=11.0
+# 不把本机路径（含用户名）编进程序：CARGO_HOME、仓库根、HOME 分别映射成 /cargo、/src、/home
+source "$(dirname "$0")/packaging/rust_remap.sh"
 (cd .. && cargo build --release -p plumesign && cargo build --release -p plumesign --target x86_64-apple-darwin)
 mkdir -p ../target/universal
 lipo -create ../target/release/plumesign ../target/x86_64-apple-darwin/release/plumesign -output ../target/universal/plumesign

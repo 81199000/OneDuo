@@ -1,4 +1,6 @@
-# 编译产物里不写入本机用户目录（CARGO_HOME / 源码路径）
+# 编译产物里不写入本机用户目录：真正的路径映射（CARGO_HOME → /cargo、仓库根 → /src、
+# HOME → /home）由发版 / 打包脚本在构建前通过 CARGO_ENCODED_RUSTFLAGS 传入（见 py/build_mac.sh）。
+# 这里只放兜底映射，保证直接 cargo build 也不会带出完整的 /Users/<用户名>/。
 [target.x86_64-pc-windows-gnu]
 rustflags = ["--remap-path-prefix=/Users=/build"]
 

@@ -53,7 +53,7 @@ if [[ -n $ONEDUO_SKIP_MAC && -f $MAC ]]; then echo "（沿用已公证的 $MAC�
 spctl --assess --type execute "dist/一键签.app" || die "Mac 包没通过系统检查（签名 / 公证）"
 
 print "3/6 Windows 打包"
-(cd "$ROOT" && cargo build --release -p plumesign --target x86_64-pc-windows-gnu)
+(cd "$ROOT" && ONETAP_RUST_TARGET=win source py/packaging/rust_remap.sh && cargo build --release -p plumesign --target x86_64-pc-windows-gnu)
 ./packaging/win_remote.sh run 'New-Item -ItemType Directory -Force packaging\drivers | Out-Null; foreach ($f in "C:\onetap\drv\x\AppleMobileDeviceSupport64.msi","C:\onetap\drv\Bonjour64.msi") { if (Test-Path $f) { Copy-Item $f packaging\drivers\ -Force } }; Remove-Item dist\OneDuo-*-setup.exe -ErrorAction SilentlyContinue; powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_win.ps1 2>&1 | Select-Object -Last 2'
 scp -4 -o BatchMode=yes -q "$ONETAP_WIN:C:/onetap/src/py/$WIN" "$WIN" || die "取回 Windows 安装包失败"
 
