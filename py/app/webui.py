@@ -411,8 +411,8 @@ class Api:
                 dev = next((d for d in core.list_devices() if d.udid == udid), None)
                 certs.check_device(cert, udid, dev.name if dev else "这台手机")
                 bid = a.bundle_id or (core.inspect_ipa(a.local_path)["bundle_id"] if a.local_path else "")
-                certs.check_app(cert, bid, a.name)
-                self.push("step", {"step": "account", "state": "ok", "note": "证书：" + (cert.get("team_name") or cert.get("name", ""))})
+                warn = certs.check_app(cert, bid, a.name)
+                self.push("step", {"step": "account", "state": "ok", "note": "证书：" + (cert.get("team_name") or cert.get("name", "")) + (f"（{warn}）" if warn else "")})
                 accts = None
             else:
                 accts = core.saved_accounts()

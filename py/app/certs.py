@@ -163,16 +163,15 @@ def profile_bundle_id(c: dict) -> str:
     return aid.split(".", 1)[1] if "." in aid else aid
 
 
-def check_app(c: dict, bundle_id: str, name: str = "这个 App") -> None:
-    """非通配符描述文件只能签它绑定的那一个 App。别的 App 硬签会被改成同一个包名，
-    装上去会把手机上原来那个 App 覆盖掉，所以直接拦住"""
+def check_app(c: dict, bundle_id: str, name: str = "这个 App") -> str:
+    """非通配符描述文件只绑定一个包名。和全能签一样不拦：签名时把 App 包名改成描述文件里的（见 plumesign
+    PLUME_CERT_BUNDLE_ID）。返回给界面看的提示（None = 不需要提示）：改了包名会覆盖手机上同包名的 App"""
     if wildcard(c):
-        return
+        return None
     pid = profile_bundle_id(c)
     if not bundle_id or pid == bundle_id or pid.startswith(bundle_id + "."):
-        return
-    raise core.SignError(f"这张证书的描述文件只能签「{pid}」，签不了{name}（{bundle_id}）。"
-                         "请向证书提供方要通配符（*）描述文件，或改用 Apple ID 签名")
+        return None
+    return f"这张证书只绑定了「{pid}」，{name}会改用这个包名安装，会覆盖手机上同包名的 App"
 
 
 def sign_and_install(c: dict, ipa: Path, udid: str, on_line) -> None:

@@ -533,7 +533,7 @@ function renderSet() {
     return `<div class="srow"><span class="radio ${S.sign.mode === c.id ? "on" : ""}" onclick="setMode('${c.id}')"></span>
       <div class="t" onclick="setMode('${c.id}')" style="cursor:pointer"><h4>${esc(c.team_name || c.name)} <span class="m" style="display:inline">${esc(c.team)}</span></h4>
         <div class="m">${esc(c.name)} · ${exp}</div>
-        <div class="m">描述文件「${esc(c.prov_name)}」· ${c.wildcard ? "通配符，能签任何 App" : "只能签 " + esc(c.app_id.replace(/^[A-Z0-9]{10}\./, ""))} · ${c.all_devices ? "所有设备" : c.device_count + " 台设备"}</div></div>
+        <div class="m">描述文件「${esc(c.prov_name)}」· ${c.wildcard ? "通配符，保持 App 原包名" : "单包名 " + esc(c.app_id.replace(/^[A-Z0-9]{10}\./, "")) + "（装别的 App 会改用此包名、覆盖同包名）"} · ${c.all_devices ? "所有设备" : c.device_count + " 台设备"}</div></div>
       <button class="smallbtn" onclick="if(confirm('删除这张证书？')) api().remove_cert('${c.id}').then(d => { S.sign = d; renderSet(); })">删除</button></div>`;
   };
   const dev = S.dev ? `当前手机「${esc(S.dev.name)}」UDID：<span style="-webkit-user-select:text;user-select:text;color:var(--sub)">${esc(S.dev.udid)}</span>（找证书提供方加设备时发这个）` : "连上手机后这里会显示它的 UDID";
