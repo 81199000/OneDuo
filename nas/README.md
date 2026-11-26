@@ -31,7 +31,6 @@ mkdir -p nas/bin && cp target-linux-x86_64/release/plumesign nas/bin/
 # netmuxd：github.com/jkcoxson/netmuxd 同样在 rust:1-alpine 里 cargo build --release，产物放 nas/bin/netmuxd
 # 放到 nas/bin/amd64/、nas/bin/arm64/（arm64 在 Apple 芯片 Mac 上用 --platform linux/arm64 原生编）
 ./nas/build.sh        # → dist/nas/oneduo-nas-<版本>-{amd64,arm64}.tar.gz
-./nas/release.sh      # → dl.oneduo.app/oneduo/nas/（最后写 latest.json，电脑版据此下载）
 ```
 
 ## 环境变量
