@@ -21,7 +21,9 @@ import tempfile
 import urllib.error
 import urllib.request
 
-ACCOUNT = os.environ.get("ONEDUO_CF_ACCOUNT", "<CF_ACCOUNT_ID>")
+ACCOUNT = os.environ.get("ONEDUO_CF_ACCOUNT") or (pathlib.Path.home() / ".config/oneduo/cf_account").read_text().strip() \
+    if (os.environ.get("ONEDUO_CF_ACCOUNT") or (pathlib.Path.home() / ".config/oneduo/cf_account").exists()) \
+    else sys.exit("没有 Cloudflare 账号 ID（ONEDUO_CF_ACCOUNT 或 ~/.config/oneduo/cf_account）")
 BUCKET = os.environ.get("ONEDUO_R2_BUCKET", "oneduo-dl")
 PUBLIC = "https://dl.oneduo.app"
 API = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/r2/buckets/{BUCKET}/objects/"
