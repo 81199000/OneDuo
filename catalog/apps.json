@@ -2,8 +2,8 @@
   "schema": 1,
   "installer": {
     "name": "一键签",
-    "latest": "0.2.7",
-    "notes": "新增「装到电视」：在「我的手机」页一键找到局域网里的安卓电视，自动下载并装好 GuoDuo TV；修复若干小问题。",
+    "latest": "0.2.8",
+    "notes": "修复：证书签名时，单包名描述文件不再直接拒绝，改为像全能签一样改用描述文件的包名签名，并提示会覆盖同包名 App。",
     "download": {
       "gitee": "https://oneduo.app/#download",
       "github": "https://oneduo.app/#download",
@@ -11,14 +11,14 @@
     },
     "assets": {
       "macos": {
-        "name": "OneDuo-0.2.7-macos-universal.zip",
-        "size": 29950587,
-        "sha256": "079772d230f210fe0008f211a82c88698fb0a93718098b8484cd55b5634433c6"
+        "name": "OneDuo-0.2.8-macos-universal.zip",
+        "size": 29950133,
+        "sha256": "327f8de8c6780d69db447c0bf70f1badc0dbd53d7d0eab29444e423e4c26e17d"
       },
       "windows": {
-        "name": "OneDuo-0.2.7-windows-x64-setup.exe",
-        "size": 49723129,
-        "sha256": "0ec25e0e5b8b66d73f805d5f29d5add509e42dc5d7b0e685f373ad873b8e5853"
+        "name": "OneDuo-0.2.8-windows-x64-setup.exe",
+        "size": 49918360,
+        "sha256": "c04e675e36dad5c1549a0367394f451766576a7abc06b6270abf30d37e3a6bc3"
       }
     }
   },
