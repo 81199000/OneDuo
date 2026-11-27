@@ -87,7 +87,7 @@ _ssl_ctx = None
 def ssl_context():
     """HTTPS 根证书。打包后的 Mac 版 OpenSSL 只认 python.org 安装目录下的 cert.pem，
     用户电脑上没有这个文件 → 所有 HTTPS 都报 CERTIFICATE_VERIFY_FAILED（Gitee / R2 全挂，
-    列表一直「读取版本…」）。这里补上系统自带的证书包和随包的 certifi（工单 B15）"""
+    列表一直「读取版本…」）。这里补上系统自带的证书包和随包的 certifi"""
     global _ssl_ctx
     if _ssl_ctx is None:
         import ssl
@@ -482,11 +482,11 @@ _FRIENDLY = [
     (r"PROV_BAD_FORMAT|ProvisioningEntitlementsUnknown", "描述文件（.mobileprovision）读不出来，确认文件没损坏"),
     (r"ApplicationVerificationFailed|0xe8008015|A valid provisioning profile", "手机拒绝安装：描述文件不包含这台手机，或者证书已被苹果吊销（掉签）"),
     (r"0xe800801c|no longer valid|revoked", "证书已被苹果吊销（掉签），换一个证书"),
-    # 苹果返回 -20209「This Apple ID has been locked for security reasons」：是账号被锁，不是手机锁屏（工单 B10）
+    # 苹果返回 -20209「This Apple ID has been locked for security reasons」：是账号被锁，不是手机锁屏
     (r"-20209|Apple ID has been (locked|disabled)|account (is |has been )?(locked|disabled)",
      "Apple ID 被苹果锁定了（安全原因），去 iforgot.apple.com 解锁或改密码后再登录"),
     # 苹果 -23782「A Mac with macOS version 10.13 or later is required」：嫌登录用的 Mac 身份太旧，
-    # 和用户电脑系统无关；内核已自动换新身份重试，仍失败才会走到这里（工单 B33）
+    # 和用户电脑系统无关；内核已自动换新身份重试，仍失败才会走到这里
     (r"-23782|macOS version 10\.13", "苹果暂时拒绝了这个 Apple ID 的登录（错误 -23782，和你电脑的系统版本无关），请升级一键签到最新版后重试，或换一个 Apple ID"),
     (r"Incorrect|-20101|invalid.*credentials|password", "Apple ID 或密码不对"),
     (r"maximum number of apps|limit.*app ids|-7.*7.?day", "免费 Apple ID 7 天内最多注册 10 个 App ID，过几天再装或换个 Apple ID"),
@@ -494,7 +494,7 @@ _FRIENDLY = [
     # 只认 idevice 的设备锁屏错误（"device locked" / "device is locked" / DeviceLocked / PasswordProtected）
     (r"device (is )?locked|DeviceLocked|PasswordProtected", "手机锁着屏，请解锁后保持亮屏"),
     (r"Developer Mode|developer mode", "手机没打开开发者模式（设置 → 隐私与安全性 → 开发者模式）"),
-    # 只认 idevice 的配对错误；以前 "pair|trust" 会被 App 里的 TrustKit.framework 之类文件名误命中（工单 B14）
+    # 只认 idevice 的配对错误；以前 "pair|trust" 会被 App 里的 TrustKit.framework 之类文件名误命中
     (r"pairing file|pair ?record|InvalidHostID|pairing trust|denied pairing|Pairing rejected|Pair verify|"
      r"PairingDialogResponsePending|UserDeniedPairing|not paired|NotPaired",
      "手机还没信任这台电脑：在手机上点「信任」并输入锁屏密码"),
@@ -508,7 +508,7 @@ _LOG_LINE = re.compile(r"^\[\S+\s+(TRACE|DEBUG|INFO|WARN)\s")
 
 def _error_part(msg: str) -> str:
     """plumesign 的整段输出里混着 info 日志（签名时每个文件一行 copying file …），
-    只拿真正的报错去匹配：anyhow 最后打的 "Error: …"（含 Caused by）；没有就去掉普通日志行（工单 B14）"""
+    只拿真正的报错去匹配：anyhow 最后打的 "Error: …"（含 Caused by）；没有就去掉普通日志行"""
     lines = msg.splitlines()
     idx = [i for i, ln in enumerate(lines) if ln.startswith("Error:")]
     if idx:

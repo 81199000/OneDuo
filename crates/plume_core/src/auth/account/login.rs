@@ -155,7 +155,7 @@ impl Account {
     ) -> Result<LoginState, Error> {
         match self.login_email_pass_once(username, password).await {
             // 苹果嫌公共 anisette 报的 Mac OS X 10.12.6 太旧（-23782「需要 macOS 10.13 或更高」），
-            // 和用户电脑是 Windows 还是 Mac 无关；换成较新的 Mac 身份重试一次（工单 B33）
+            // 和用户电脑是 Windows 还是 Mac 无关；换成较新的 Mac 身份重试一次
             Err(Error::AuthSrpWithMessage(-23782, _))
                 if self.anisette.lock().await.client_info_override.is_none() =>
             {
@@ -232,7 +232,7 @@ impl Account {
 
         // 苹果按账号选 SRP 协议（响应里的 "sp"）：s2k 直接用 SHA256 原始字节；
         // s2k_fo 要先把 SHA256 转成小写十六进制字符串再做 PBKDF2。
-        // 以前一律按 s2k 算，被分到 s2k_fo 的账号密码再对也报 -20101「密码不对」（工单 B19）
+        // 以前一律按 s2k 算，被分到 s2k_fo 的账号密码再对也报 -20101「密码不对」
         let protocol = res.get("sp").and_then(|v| v.as_string()).unwrap_or("s2k");
         let hashed_password = Sha256::digest(password.as_bytes());
         let pbkdf2_input: Vec<u8> = if protocol == "s2k_fo" {

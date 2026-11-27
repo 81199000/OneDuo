@@ -6,7 +6,7 @@ use omnisette::{AnisetteConfiguration, AnisetteHeaders};
 use crate::Error;
 
 /// 公共 anisette 服务器报的身份是 Mac OS X 10.12.6，苹果对部分账号会拒绝登录：
-/// -23782「A Mac with macOS version 10.13 or later is required」（工单 B33）。
+/// -23782「A Mac with macOS version 10.13 or later is required」。
 /// 收到这个错误后改用这个较新的 Mac 身份重试，并在本次会话里一直沿用。
 pub const MODERN_CLIENT_INFO: &str =
     "<MacBookPro13,3> <macOS;13.6.7;22G720> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
