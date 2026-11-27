@@ -106,3 +106,4 @@ xmllint --format "$OUT_FILE" --output "$OUT_FILE"
 rm -f "$DESCRIPTION_TMP" "$RELEASE_TMP"
 
 echo "✅ Updated metainfo written to $OUT_FILE"
+

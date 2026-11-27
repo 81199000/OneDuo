@@ -123,3 +123,4 @@ To properly contribute and test potentially test localizations, you can head ove
 ## License
 
 Project is licensed under the MIT license. You can see the full details of the license [here](https://github.com/khcrysalis/PlumeImpactor/blob/main/LICENSE). Some components may be licensed under different licenses, see their respective directories for details.
+

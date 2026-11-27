@@ -170,3 +170,4 @@ endif
 ifeq ($(OS),darwin)
 	@cp -r ./dist/Impactor.app $(PREFIX)/Impactor.app
 endif
+

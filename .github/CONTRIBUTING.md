@@ -71,3 +71,4 @@ sudo dnf install clang-devel pkg-config gtk3-devel libpng-devel libjpeg-devel me
 
 - Make sure your contributions stay isolated in their own branch, and not `main`.
 - When contributing don't be afraid of any reviewers requesting changes or judging how you wrote something, it's all to keep the project clean and tidy.
+
