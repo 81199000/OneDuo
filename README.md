@@ -220,4 +220,3 @@ powershell -ExecutionPolicy Bypass -File py\packaging\build_win.ps1
 ## 致谢
 
 签名核心基于 [Impactor](https://github.com/claration/Impactor)（MIT 协议），感谢原作者。
-
