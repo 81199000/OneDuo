@@ -10,4 +10,3 @@ Icon=dev.khcrysalis.PlumeImpactor
 Exec=plumeimpactor
 Terminal=false
 StartupWMClass=dev.khcrysalis.PlumeImpactor
-
