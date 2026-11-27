@@ -77,4 +77,3 @@ login_no_code = "Didn't get a code?"
 login_send_sms = "Send via SMS"
 login_verify = "تحقق"
 login_verifying = "جارٍ التحقق..."
-
