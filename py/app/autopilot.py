@@ -237,4 +237,3 @@ class Autopilot:
         finally:
             self.current = None
             self.on_event("changed", {})
-
